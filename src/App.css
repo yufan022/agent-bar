@@ -478,6 +478,51 @@ body {
   padding: 10px;
 }
 
+.bridge-result-card-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.bridge-result-card-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.bridge-result-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bridge-card-hint {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8ec7ff;
+}
+
+.bridge-back-btn {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: #8ec7ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 2px 2px;
+}
+
+.bridge-back-btn:hover {
+  color: #b5dbff;
+}
+
 .bridge-result-header {
   display: flex;
   align-items: flex-start;

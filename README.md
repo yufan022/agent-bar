@@ -43,7 +43,7 @@ Sync **user-global** instructions, skills, and MCP between:
 - MCP: convert via an internal IR and merge safely (other config keys preserved)
 - Cursor has no stable file-based User Rules API, so instructions are skipped; skill sync to Cursor is also disabled (only MCP is written)
 
-In the popover, open **Bridge** (icon next to Settings) for Status / Sync / Diff / List.
+In the popover, open **Bridge** (icon next to Settings) for Status / Sync / Diff. Click a tool on Status to open its inventory.
 
 ## CLI
 

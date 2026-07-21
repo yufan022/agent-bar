@@ -15,14 +15,19 @@ import type {
 } from "../types";
 import { BRIDGE_KINDS, BRIDGE_TOOLS, bridgeToolLabel } from "../types";
 
-type BridgeTab = "status" | "sync" | "diff" | "list";
+type BridgeTab = "status" | "sync" | "diff";
 
 const TABS: { id: BridgeTab; label: string }[] = [
   { id: "status", label: "Status" },
   { id: "sync", label: "Sync" },
   { id: "diff", label: "Diff" },
-  { id: "list", label: "List" },
 ];
+
+function asBridgeToolId(tool: string): BridgeToolId | null {
+  return BRIDGE_TOOLS.some((t) => t.id === tool)
+    ? (tool as BridgeToolId)
+    : null;
+}
 
 function shortPath(path: string): string {
   if (path.length <= 42) {
@@ -58,7 +63,13 @@ function instructionsTone(
   return "missing";
 }
 
-function StatusToolCard({ tool }: { tool: ToolStatus }) {
+function StatusToolCard({
+  tool,
+  onOpen,
+}: {
+  tool: ToolStatus;
+  onOpen: (tool: string) => void;
+}) {
   const instrTone = instructionsTone(tool.instructions);
   const instrLabel =
     tool.instructions.state === "unsupported"
@@ -73,9 +84,16 @@ function StatusToolCard({ tool }: { tool: ToolStatus }) {
       : tool.instructions.path;
 
   return (
-    <article className="bridge-result-card">
+    <button
+      type="button"
+      className="bridge-result-card bridge-result-card-btn"
+      onClick={() => onOpen(tool.tool)}
+    >
       <header className="bridge-result-header">
-        <h3>{bridgeToolLabel(tool.tool)}</h3>
+        <div className="bridge-result-title">
+          <h3>{bridgeToolLabel(tool.tool)}</h3>
+          <span className="bridge-card-hint">Details →</span>
+        </div>
         <div className="bridge-dots">
           <PresenceDot tone={instrTone} label={instrLabel} />
           <PresenceDot
@@ -134,7 +152,7 @@ function StatusToolCard({ tool }: { tool: ToolStatus }) {
           </code>
         </div>
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -221,7 +239,13 @@ function SyncLineRow({ line }: { line: SyncLine }) {
   );
 }
 
-function StatusView({ report }: { report: StatusReport | null }) {
+function StatusView({
+  report,
+  onOpenTool,
+}: {
+  report: StatusReport | null;
+  onOpenTool: (tool: string) => void;
+}) {
   if (!report) {
     return <EmptyHint text="Load status to see tool readiness." />;
   }
@@ -231,15 +255,30 @@ function StatusView({ report }: { report: StatusReport | null }) {
   return (
     <div className="bridge-results">
       {report.tools.map((tool) => (
-        <StatusToolCard key={tool.tool} tool={tool} />
+        <StatusToolCard key={tool.tool} tool={tool} onOpen={onOpenTool} />
       ))}
     </div>
   );
 }
 
-function ListView({ report }: { report: ListReport | null }) {
+function ListView({
+  report,
+  onBack,
+  busy,
+}: {
+  report: ListReport | null;
+  onBack: () => void;
+  busy: boolean;
+}) {
   if (!report) {
-    return <EmptyHint text="Pick a tool and run List." />;
+    return (
+      <div className="bridge-results">
+        <button type="button" className="bridge-back-btn" onClick={onBack}>
+          ← Back
+        </button>
+        <EmptyHint text={busy ? "Loading…" : "Failed to load tool details."} />
+      </div>
+    );
   }
 
   const instrLabel =
@@ -251,6 +290,9 @@ function ListView({ report }: { report: ListReport | null }) {
 
   return (
     <div className="bridge-results">
+      <button type="button" className="bridge-back-btn" onClick={onBack}>
+        ← Status
+      </button>
       <article className="bridge-result-card">
         <header className="bridge-result-header">
           <h3>{bridgeToolLabel(report.tool)}</h3>
@@ -417,7 +459,7 @@ export function BridgePanel() {
   const [diffTo, setDiffTo] = useState<BridgeToolId>("cursor");
   const [diffReport, setDiffReport] = useState<DiffReport | null>(null);
 
-  const [listTool, setListTool] = useState<BridgeToolId>("claude");
+  const [listTool, setListTool] = useState<BridgeToolId | null>(null);
   const [listReport, setListReport] = useState<ListReport | null>(null);
 
   const run = useCallback(async (action: () => Promise<void>) => {
@@ -440,11 +482,39 @@ export function BridgePanel() {
     });
   }, [run, statusTool]);
 
+  const openToolList = useCallback(
+    (toolName: string) => {
+      const tool = asBridgeToolId(toolName);
+      if (!tool) {
+        setError(`Unknown tool: ${toolName}`);
+        return;
+      }
+      setListTool(tool);
+      setListReport(null);
+      void run(async () => {
+        const report = await invoke<ListReport>("bridge_list", { tool });
+        setListReport(report);
+      });
+    },
+    [run],
+  );
+
+  const closeToolList = useCallback(() => {
+    setListTool(null);
+    setListReport(null);
+  }, []);
+
   useEffect(() => {
-    if (tab === "status") {
+    if (tab === "status" && listTool === null) {
       loadStatus();
     }
-  }, [tab, loadStatus]);
+  }, [tab, listTool, loadStatus]);
+
+  useEffect(() => {
+    if (tab !== "status") {
+      closeToolList();
+    }
+  }, [tab, closeToolList]);
 
   const toggleTo = (id: BridgeToolId) => {
     setSyncTo((prev) =>
@@ -481,6 +551,8 @@ export function BridgePanel() {
     });
   };
 
+  const showingList = tab === "status" && listTool !== null;
+
   return (
     <div className="bridge-panel">
       <nav className="agent-tabs" aria-label="Bridge actions">
@@ -499,7 +571,7 @@ export function BridgePanel() {
         ))}
       </nav>
 
-      {tab === "status" ? (
+      {tab === "status" && !showingList ? (
         <section className="card bridge-card">
           <div className="bridge-form-row">
             <label className="bridge-label" htmlFor="status-tool">
@@ -677,54 +749,22 @@ export function BridgePanel() {
         </section>
       ) : null}
 
-      {tab === "list" ? (
-        <section className="card bridge-card">
-          <div className="bridge-form-row">
-            <label className="bridge-label" htmlFor="list-tool">
-              Tool
-            </label>
-            <select
-              id="list-tool"
-              className="bridge-select"
-              value={listTool}
-              onChange={(e) => setListTool(e.target.value as BridgeToolId)}
-            >
-              {BRIDGE_TOOLS.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="refresh-btn"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const report = await invoke<ListReport>("bridge_list", {
-                    tool: listTool,
-                  });
-                  setListReport(report);
-                })
-              }
-            >
-              {busy ? "…" : "List"}
-            </button>
-          </div>
-        </section>
-      ) : null}
-
       {error ? <p className="error-text">{error}</p> : null}
 
       <div className="bridge-result-area" aria-live="polite">
         {tab === "status" ? (
-          busy && !statusReport ? (
+          showingList ? (
+            <ListView
+              report={listReport}
+              onBack={closeToolList}
+              busy={busy}
+            />
+          ) : busy && !statusReport ? (
             <EmptyHint text="Loading…" />
           ) : (
-            <StatusView report={statusReport} />
+            <StatusView report={statusReport} onOpenTool={openToolList} />
           )
         ) : null}
-        {tab === "list" ? <ListView report={listReport} /> : null}
         {tab === "diff" ? <DiffView report={diffReport} /> : null}
         {tab === "sync" ? <SyncView report={syncReport} /> : null}
       </div>
