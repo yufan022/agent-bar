@@ -8,6 +8,14 @@ pub enum AppError {
     Auth(#[from] AuthError),
     #[error("{0}")]
     Quota(#[from] QuotaError),
+    #[error("{0}")]
+    Bridge(String),
+}
+
+impl From<agent_bridge_core::Error> for AppError {
+    fn from(value: agent_bridge_core::Error) -> Self {
+        AppError::Bridge(value.to_string())
+    }
 }
 
 impl Serialize for AppError {

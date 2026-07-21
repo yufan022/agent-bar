@@ -1,4 +1,5 @@
 mod auth;
+mod bridge;
 mod error;
 mod model;
 mod provider;
@@ -204,7 +205,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
         .manage(state)
-        .invoke_handler(tauri::generate_handler![get_agents_quota, refresh_quota])
+        .invoke_handler(tauri::generate_handler![
+            get_agents_quota,
+            refresh_quota,
+            bridge::bridge_status,
+            bridge::bridge_list,
+            bridge::bridge_diff,
+            bridge::bridge_sync,
+        ])
         .setup(|app| {
             #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
             {

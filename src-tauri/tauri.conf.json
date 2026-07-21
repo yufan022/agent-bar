@@ -15,8 +15,8 @@
       {
         "label": "main",
         "title": "agent-bar",
-        "width": 360,
-        "height": 520,
+        "width": 400,
+        "height": 620,
         "resizable": false,
         "decorations": false,
         "transparent": true,

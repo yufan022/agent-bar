@@ -96,3 +96,33 @@ export function formatTime(iso: string | null): string {
     minute: "2-digit",
   });
 }
+
+
+export type BridgeToolId = "claude" | "codex" | "opencode" | "cursor";
+
+export const BRIDGE_TOOLS: { id: BridgeToolId; label: string }[] = [
+  { id: "claude", label: "Claude" },
+  { id: "codex", label: "Codex" },
+  { id: "opencode", label: "OpenCode" },
+  { id: "cursor", label: "Cursor" },
+];
+
+export const BRIDGE_KINDS: { id: string; label: string }[] = [
+  { id: "instructions", label: "Instructions" },
+  { id: "skills", label: "Skills" },
+  { id: "mcp", label: "MCP" },
+];
+
+export interface BridgeSyncRequest {
+  from: string;
+  to: string[];
+  only: string[];
+  dryRun: boolean;
+  prune: boolean;
+  force: boolean;
+}
+
+export interface BridgeSyncResponse {
+  ok: boolean;
+  report: string;
+}

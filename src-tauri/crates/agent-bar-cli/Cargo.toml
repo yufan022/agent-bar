@@ -1,0 +1,15 @@
+[package]
+name = "agent-bar-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "agent-bar CLI (bridge subcommands)"
+
+[[bin]]
+name = "agent-bar"
+path = "src/main.rs"
+
+[dependencies]
+agent-bridge = { path = "../agent-bridge" }
+clap = { workspace = true }
