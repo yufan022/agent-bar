@@ -129,7 +129,8 @@ fn show_popover(app: &AppHandle, window: &WebviewWindow) {
 fn build_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error::Error>> {
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&refresh, &quit])?;
+    let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&refresh, &settings, &quit])?;
 
     let icon = match app.default_window_icon().cloned() {
         Some(icon) => icon,
@@ -158,6 +159,12 @@ fn build_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error::Error>> {
                         let _ = app_handle.emit("quota-updated", &response);
                     }
                 });
+            }
+            "settings" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    show_popover(app, &window);
+                    let _ = app.emit("open-settings", ());
+                }
             }
             _ => {}
         })
@@ -206,6 +213,14 @@ pub fn run() {
         .manage(state)
         .invoke_handler(tauri::generate_handler![get_agents_quota, refresh_quota])
         .setup(|app| {
+            #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
+            {
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                    None,
+                ))?;
+            }
+
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
