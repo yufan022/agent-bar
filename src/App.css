@@ -167,16 +167,22 @@ body {
   background: linear-gradient(90deg, #ff7b72, #e5534b);
 }
 
-.percent-label {
-  font-size: 12px;
-  color: #a8b0bd;
-}
 
 .split-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 4px;
+  gap: 10px;
   margin-bottom: 10px;
+}
+
+.percent-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.percent-metric .progress-track {
+  height: 6px;
 }
 
 .metric-row {
@@ -186,6 +192,10 @@ body {
   padding: 4px 0;
   color: #c2c8d1;
   font-size: 12px;
+}
+
+.percent-metric .metric-row {
+  padding: 0;
 }
 
 .metric-row strong {

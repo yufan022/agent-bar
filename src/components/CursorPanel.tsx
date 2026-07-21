@@ -4,7 +4,6 @@ import {
   formatDate,
   formatRemaining,
   formatTime,
-  percentUsed,
 } from "../types";
 
 interface Props {
@@ -41,8 +40,25 @@ function MetricRow({
   );
 }
 
+function PercentMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null;
+}) {
+  return (
+    <div className="percent-metric">
+      <div className="metric-row">
+        <span>{label}</span>
+        <strong>{value === null ? "—" : `${value.toFixed(1)}%`}</strong>
+      </div>
+      <ProgressBar value={value} />
+    </div>
+  );
+}
+
 export function CursorPanel({ snapshot }: Props) {
-  const pct = percentUsed(snapshot);
   const isError = snapshot.status === "error";
 
   return (
@@ -81,37 +97,15 @@ export function CursorPanel({ snapshot }: Props) {
                 {formatAmount(snapshot.limit, snapshot.unit)} used
               </span>
             </div>
-            <ProgressBar value={pct} />
-            <div className="percent-label">
-              {pct === null ? "—" : `${pct.toFixed(1)}% used`}
-            </div>
           </div>
 
           <div className="split-grid">
-            <MetricRow
+            <PercentMetric
               label="First-Party Models"
-              value={
-                snapshot.autoPercentUsed === null
-                  ? "—"
-                  : `${snapshot.autoPercentUsed.toFixed(1)}%`
-              }
+              value={snapshot.autoPercentUsed}
             />
-            <MetricRow
-              label="API"
-              value={
-                snapshot.apiPercentUsed === null
-                  ? "—"
-                  : `${snapshot.apiPercentUsed.toFixed(1)}%`
-              }
-            />
-            <MetricRow
-              label="Total"
-              value={
-                snapshot.totalPercentUsed === null
-                  ? "—"
-                  : `${snapshot.totalPercentUsed.toFixed(1)}%`
-              }
-            />
+            <PercentMetric label="API" value={snapshot.apiPercentUsed} />
+            <PercentMetric label="Total" value={snapshot.totalPercentUsed} />
           </div>
 
           {snapshot.onDemand ? (
