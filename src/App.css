@@ -66,6 +66,43 @@ body {
   gap: 10px;
 }
 
+.agent-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.agent-tab {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #8b93a1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-tab:hover:not(.agent-tab-active) {
+  color: #c2c8d1;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.agent-tab-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f0f3f7;
+}
+
 .card {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);

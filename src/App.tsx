@@ -8,6 +8,13 @@ import type { AgentsQuotaResponse, QuotaSnapshot } from "./types";
 import { formatTime } from "./types";
 
 type View = "home" | "settings";
+type AgentTab = "cursor" | "claude-code" | "codex";
+
+const AGENT_TABS: { id: AgentTab; label: string }[] = [
+  { id: "cursor", label: "Cursor" },
+  { id: "claude-code", label: "Claude Code" },
+  { id: "codex", label: "Codex" },
+];
 
 function findAgent(
   agents: QuotaSnapshot[],
@@ -37,6 +44,7 @@ function SettingsIcon() {
 
 function App() {
   const [view, setView] = useState<View>("home");
+  const [agentTab, setAgentTab] = useState<AgentTab>("cursor");
   const [data, setData] = useState<AgentsQuotaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -152,14 +160,43 @@ function App() {
           <SettingsPanel />
         ) : (
           <>
-            {loading && !data ? (
-              <p className="muted">Fetching Cursor usage…</p>
-            ) : null}
-            {error && !cursor ? <p className="error-text">{error}</p> : null}
+            <nav className="agent-tabs" aria-label="Agents">
+              {AGENT_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={
+                    agentTab === tab.id
+                      ? "agent-tab agent-tab-active"
+                      : "agent-tab"
+                  }
+                  aria-selected={agentTab === tab.id}
+                  onClick={() => setAgentTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
 
-            {cursor ? <CursorPanel snapshot={cursor} /> : null}
-            <AgentPlaceholder name="Claude Code" />
-            <AgentPlaceholder name="Codex" />
+            {agentTab === "cursor" ? (
+              <>
+                {loading && !data ? (
+                  <p className="muted">Fetching Cursor usage…</p>
+                ) : null}
+                {error && !cursor ? (
+                  <p className="error-text">{error}</p>
+                ) : null}
+                {cursor ? <CursorPanel snapshot={cursor} /> : null}
+              </>
+            ) : null}
+
+            {agentTab === "claude-code" ? (
+              <AgentPlaceholder name="Claude Code" />
+            ) : null}
+
+            {agentTab === "codex" ? (
+              <AgentPlaceholder name="Codex" />
+            ) : null}
           </>
         )}
       </main>
