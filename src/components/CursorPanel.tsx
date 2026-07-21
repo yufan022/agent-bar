@@ -58,7 +58,15 @@ function PercentMetric({
   );
 }
 
+function spendPercentUsed(snapshot: QuotaSnapshot): number | null {
+  if (snapshot.used === null || snapshot.limit === null || snapshot.limit <= 0) {
+    return null;
+  }
+  return (snapshot.used / snapshot.limit) * 100;
+}
+
 export function CursorPanel({ snapshot }: Props) {
+  const spendPct = spendPercentUsed(snapshot);
   const isError = snapshot.status === "error";
 
   return (
@@ -97,6 +105,7 @@ export function CursorPanel({ snapshot }: Props) {
                 {formatAmount(snapshot.limit, snapshot.unit)} used
               </span>
             </div>
+            <ProgressBar value={spendPct} />
           </div>
 
           <div className="split-grid">
