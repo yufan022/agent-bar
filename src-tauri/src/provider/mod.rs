@@ -25,6 +25,7 @@ pub async fn fetch_all_agents() -> Vec<QuotaSnapshot> {
     let cursor = cursor::CursorProvider::new();
     let claude = stub::StubProvider::claude_code();
     let codex = stub::StubProvider::codex();
+    let grok = stub::StubProvider::grok_build();
 
     let cursor_result = match cursor.fetch().await {
         Ok(snapshot) => snapshot,
@@ -41,5 +42,10 @@ pub async fn fetch_all_agents() -> Vec<QuotaSnapshot> {
         Err(err) => QuotaSnapshot::error_snapshot(codex.id(), codex.name(), err.to_string()),
     };
 
-    vec![cursor_result, claude_result, codex_result]
+    let grok_result = match grok.fetch().await {
+        Ok(snapshot) => snapshot,
+        Err(err) => QuotaSnapshot::error_snapshot(grok.id(), grok.name(), err.to_string()),
+    };
+
+    vec![cursor_result, claude_result, codex_result, grok_result]
 }

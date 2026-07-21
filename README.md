@@ -1,6 +1,6 @@
 # agent-bar
 
-Mac menu bar app that tracks code-agent usage quotas. The first release shows **Cursor** included / remaining usage in a tray popover. Claude Code and Codex are placeholders.
+Mac menu bar app that tracks code-agent usage quotas. The first release shows **Cursor** included / remaining usage in a tray popover. Claude Code, Codex, and Grok Build are placeholders.
 
 ## Requirements
 
@@ -36,7 +36,7 @@ These endpoints are unofficial and may change without notice.
 - Menu bar title with compact Cursor remaining quota
 - Popover with plan usage, First-Party Models/API/Total percentages, on-demand spend, billing cycle, refresh
 - Background refresh every 5 minutes
-- Claude Code / Codex “Coming soon” cards
+- Claude Code / Codex / Grok Build “Coming soon” cards
 - Cookie-based auth reserved in code (`AuthSource::Cookie`) but not implemented yet
 
 ## Build

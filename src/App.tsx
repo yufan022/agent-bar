@@ -8,12 +8,13 @@ import type { AgentsQuotaResponse, QuotaSnapshot } from "./types";
 import { formatTime } from "./types";
 
 type View = "home" | "settings";
-type AgentTab = "cursor" | "claude-code" | "codex";
+type AgentTab = "cursor" | "claude-code" | "codex" | "grok-build";
 
 const AGENT_TABS: { id: AgentTab; label: string }[] = [
   { id: "cursor", label: "Cursor" },
   { id: "claude-code", label: "Claude Code" },
   { id: "codex", label: "Codex" },
+  { id: "grok-build", label: "Grok Build" },
 ];
 
 function findAgent(
@@ -196,6 +197,10 @@ function App() {
 
             {agentTab === "codex" ? (
               <AgentPlaceholder name="Codex" />
+            ) : null}
+
+            {agentTab === "grok-build" ? (
+              <AgentPlaceholder name="Grok Build" />
             ) : null}
           </>
         )}

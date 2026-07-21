@@ -21,6 +21,13 @@ impl StubProvider {
             name: "Codex",
         }
     }
+
+    pub fn grok_build() -> Self {
+        Self {
+            id: "grok-build",
+            name: "Grok Build",
+        }
+    }
 }
 
 #[async_trait]
