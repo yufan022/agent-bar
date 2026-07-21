@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::instructions;
 use crate::mcp::{normalize_mcp_for_tool, sse_conversions_for_codex};
 use crate::report::{
-    DiffChange, DiffReport, InstructionsDiff, ListInstructions, ListReport, NamedDiff,
+    DetailsInstructions, DetailsReport, DiffChange, DiffReport, InstructionsDiff, NamedDiff,
     SkillInfo, StatusReport, SyncCategory, SyncLine, SyncLineStatus, SyncReport,
     SyncTargetReport,
 };
@@ -525,8 +525,8 @@ pub fn status(tool: Option<ToolId>, home: Option<PathBuf>) -> Result<StatusRepor
     Ok(StatusReport { tools: statuses })
 }
 
-/// List skills and MCP server names for a tool.
-pub fn list(tool: ToolId, home: Option<PathBuf>) -> Result<ListReport> {
+/// Show skills, MCP servers, and instructions for a tool.
+pub fn details(tool: ToolId, home: Option<PathBuf>) -> Result<DetailsReport> {
     let adapter = adapter(tool, &home)?;
     let skills = adapter
         .list_skills()?
@@ -539,21 +539,21 @@ pub fn list(tool: ToolId, home: Option<PathBuf>) -> Result<ListReport> {
     let mcp = adapter.read_mcp()?;
     let mcp_servers = mcp.names().into_iter().map(str::to_string).collect();
     let instructions = if !adapter.supports_instructions() {
-        ListInstructions::Unsupported {
+        DetailsInstructions::Unsupported {
             path: adapter.instructions_path_display(),
         }
     } else {
         match adapter.read_instructions()? {
-            Some(body) => ListInstructions::Present {
+            Some(body) => DetailsInstructions::Present {
                 path: adapter.instructions_path_display(),
                 chars: body.chars().count(),
             },
-            None => ListInstructions::Missing {
+            None => DetailsInstructions::Missing {
                 path: adapter.instructions_path_display(),
             },
         }
     };
-    Ok(ListReport {
+    Ok(DetailsReport {
         tool: tool.to_string(),
         skills,
         mcp_servers,

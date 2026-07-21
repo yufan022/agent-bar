@@ -72,7 +72,7 @@ agent-bridge sync --from cursor --to claude --only skills,mcp --force
 agent-bridge sync --from claude --to cursor --prune
 agent-bridge diff --from claude --to cursor
 agent-bridge status
-agent-bridge list --tool claude
+agent-bridge details --tool claude
 ```
 
 ### `agent-bar bridge`
@@ -81,7 +81,7 @@ agent-bridge list --tool claude
 agent-bar bridge sync --from claude --to cursor,codex --dry-run
 agent-bar bridge diff --from claude --to cursor
 agent-bar bridge status
-agent-bar bridge list --tool claude
+agent-bar bridge details --tool claude
 ```
 
 ## How Cursor usage is loaded

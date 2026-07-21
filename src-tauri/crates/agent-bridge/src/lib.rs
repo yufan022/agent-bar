@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use agent_bridge_core::{diff, list, status, sync, RenderText, SyncKinds, SyncOptions, ToolId};
+use agent_bridge_core::{details, diff, status, sync, RenderText, SyncKinds, SyncOptions, ToolId};
 use clap::Subcommand;
 
 /// Bridge subcommands shared by `agent-bridge` and `agent-bar bridge`.
@@ -48,8 +48,8 @@ pub enum BridgeCommands {
         #[arg(long)]
         tool: Option<String>,
     },
-    /// List skills and MCP servers for a tool
-    List {
+    /// Show skills, MCP servers, and instructions for a tool
+    Details {
         #[arg(long)]
         tool: String,
     },
@@ -109,9 +109,9 @@ pub fn run_bridge(command: BridgeCommands, home: Option<PathBuf>) -> Result<(), 
             print!("{}", report.render());
             Ok(())
         }
-        BridgeCommands::List { tool } => {
+        BridgeCommands::Details { tool } => {
             let tool = parse_tool(&tool)?;
-            let report = list(tool, home).map_err(|e| e.to_string())?;
+            let report = details(tool, home).map_err(|e| e.to_string())?;
             print!("{}", report.render());
             Ok(())
         }

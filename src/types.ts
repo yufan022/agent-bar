@@ -153,16 +153,16 @@ export interface SkillInfo {
   path: string;
 }
 
-export type ListInstructions =
+export type DetailsInstructions =
   | { state: "unsupported"; path: string }
   | { state: "missing"; path: string }
   | { state: "present"; path: string; chars: number };
 
-export interface ListReport {
+export interface DetailsReport {
   tool: string;
   skills: SkillInfo[];
   mcpServers: string[];
-  instructions: ListInstructions;
+  instructions: DetailsInstructions;
 }
 
 export type DiffChange = "added" | "removed" | "same" | "changed";

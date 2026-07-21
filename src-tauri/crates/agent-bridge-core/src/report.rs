@@ -1,4 +1,4 @@
-//! Structured reports for status / list / diff / sync.
+//! Structured reports for status / details / diff / sync.
 //!
 //! Core APIs return these types. CLI renders via [`RenderText`]; UI serializes them.
 
@@ -117,16 +117,16 @@ fn bool_mark(v: bool) -> &'static str {
     }
 }
 
-// ── List ────────────────────────────────────────────────────────────────────
+// ── Details ─────────────────────────────────────────────────────────────────
 
 /// Skills / MCP / instructions inventory for one tool.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListReport {
+pub struct DetailsReport {
     pub tool: String,
     pub skills: Vec<SkillInfo>,
     pub mcp_servers: Vec<String>,
-    pub instructions: ListInstructions,
+    pub instructions: DetailsInstructions,
 }
 
 /// A discovered skill entry.
@@ -137,10 +137,10 @@ pub struct SkillInfo {
     pub path: String,
 }
 
-/// Instructions summary in a list report.
+/// Instructions summary in a details report.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
-pub enum ListInstructions {
+pub enum DetailsInstructions {
     Unsupported {
         path: String,
     },
@@ -153,7 +153,7 @@ pub enum ListInstructions {
     },
 }
 
-impl RenderText for ListReport {
+impl RenderText for DetailsReport {
     fn render(&self) -> String {
         let mut out = String::new();
         let _ = writeln!(out, "Tool: {}", self.tool);
@@ -174,15 +174,15 @@ impl RenderText for ListReport {
             }
         }
         match &self.instructions {
-            ListInstructions::Unsupported { path } => {
+            DetailsInstructions::Unsupported { path } => {
                 let _ = writeln!(out, "\nInstructions: {path}");
                 let _ = writeln!(out, "  unsupported (no stable file API)");
             }
-            ListInstructions::Missing { path } => {
+            DetailsInstructions::Missing { path } => {
                 let _ = writeln!(out, "\nInstructions: {path}");
                 let _ = writeln!(out, "  missing");
             }
-            ListInstructions::Present { path, chars } => {
+            DetailsInstructions::Present { path, chars } => {
                 let _ = writeln!(out, "\nInstructions: {path}");
                 let _ = writeln!(out, "  present ({chars} chars)");
             }

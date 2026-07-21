@@ -1,7 +1,7 @@
 //! Tauri commands wrapping agent-bridge-core.
 
 use agent_bridge_core::{
-    diff, list, status, sync, DiffReport, ListReport, StatusReport, SyncKinds, SyncOptions,
+    details, diff, status, sync, DetailsReport, DiffReport, StatusReport, SyncKinds, SyncOptions,
     SyncReport, ToolId,
 };
 use serde::{Deserialize, Serialize};
@@ -48,9 +48,9 @@ pub async fn bridge_status(tool: Option<String>) -> Result<StatusReport, AppErro
 }
 
 #[tauri::command]
-pub async fn bridge_list(tool: String) -> Result<ListReport, AppError> {
+pub async fn bridge_details(tool: String) -> Result<DetailsReport, AppError> {
     let tool = parse_tool(&tool)?;
-    tauri::async_runtime::spawn_blocking(move || list(tool, None))
+    tauri::async_runtime::spawn_blocking(move || details(tool, None))
         .await
         .map_err(|e| AppError::Bridge(format!("bridge task failed: {e}")))?
         .map_err(AppError::from)

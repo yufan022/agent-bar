@@ -22,9 +22,9 @@ pub use adapters::ToolAdapter;
 pub use error::{Error, Result};
 pub use paths::ToolPaths;
 pub use report::{
-    DiffChange, DiffReport, InstructionsDiff, InstructionsStatus, ListInstructions, ListReport,
-    NamedDiff, PathPresence, RenderText, SkillInfo, StatusReport, SyncCategory, SyncLine,
-    SyncLineStatus, SyncReport, SyncTargetReport, ToolStatus,
+    DetailsInstructions, DetailsReport, DiffChange, DiffReport, InstructionsDiff,
+    InstructionsStatus, NamedDiff, PathPresence, RenderText, SkillInfo, StatusReport, SyncCategory,
+    SyncLine, SyncLineStatus, SyncReport, SyncTargetReport, ToolStatus,
 };
-pub use sync::{diff, list, status, sync, SyncOptions};
+pub use sync::{details, diff, status, sync, SyncOptions};
 pub use tool::{SyncKinds, ToolId, WriteMode};

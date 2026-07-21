@@ -4,9 +4,9 @@ import type {
   BridgeSyncRequest,
   BridgeSyncResponse,
   BridgeToolId,
+  DetailsReport,
   DiffChange,
   DiffReport,
-  ListReport,
   StatusReport,
   SyncLine,
   SyncLineStatus,
@@ -261,12 +261,12 @@ function StatusView({
   );
 }
 
-function ListView({
+function DetailsView({
   report,
   onBack,
   busy,
 }: {
-  report: ListReport | null;
+  report: DetailsReport | null;
   onBack: () => void;
   busy: boolean;
 }) {
@@ -459,8 +459,8 @@ export function BridgePanel() {
   const [diffTo, setDiffTo] = useState<BridgeToolId>("cursor");
   const [diffReport, setDiffReport] = useState<DiffReport | null>(null);
 
-  const [listTool, setListTool] = useState<BridgeToolId | null>(null);
-  const [listReport, setListReport] = useState<ListReport | null>(null);
+  const [detailsTool, setDetailsTool] = useState<BridgeToolId | null>(null);
+  const [detailsReport, setDetailsReport] = useState<DetailsReport | null>(null);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     setBusy(true);
@@ -482,39 +482,39 @@ export function BridgePanel() {
     });
   }, [run, statusTool]);
 
-  const openToolList = useCallback(
+  const openToolDetails = useCallback(
     (toolName: string) => {
       const tool = asBridgeToolId(toolName);
       if (!tool) {
         setError(`Unknown tool: ${toolName}`);
         return;
       }
-      setListTool(tool);
-      setListReport(null);
+      setDetailsTool(tool);
+      setDetailsReport(null);
       void run(async () => {
-        const report = await invoke<ListReport>("bridge_list", { tool });
-        setListReport(report);
+        const report = await invoke<DetailsReport>("bridge_details", { tool });
+        setDetailsReport(report);
       });
     },
     [run],
   );
 
-  const closeToolList = useCallback(() => {
-    setListTool(null);
-    setListReport(null);
+  const closeToolDetails = useCallback(() => {
+    setDetailsTool(null);
+    setDetailsReport(null);
   }, []);
 
   useEffect(() => {
-    if (tab === "status" && listTool === null) {
+    if (tab === "status" && detailsTool === null) {
       loadStatus();
     }
-  }, [tab, listTool, loadStatus]);
+  }, [tab, detailsTool, loadStatus]);
 
   useEffect(() => {
     if (tab !== "status") {
-      closeToolList();
+      closeToolDetails();
     }
-  }, [tab, closeToolList]);
+  }, [tab, closeToolDetails]);
 
   const toggleTo = (id: BridgeToolId) => {
     setSyncTo((prev) =>
@@ -551,7 +551,7 @@ export function BridgePanel() {
     });
   };
 
-  const showingList = tab === "status" && listTool !== null;
+  const showingDetails = tab === "status" && detailsTool !== null;
 
   return (
     <div className="bridge-panel">
@@ -571,7 +571,7 @@ export function BridgePanel() {
         ))}
       </nav>
 
-      {tab === "status" && !showingList ? (
+      {tab === "status" && !showingDetails ? (
         <section className="card bridge-card">
           <div className="bridge-form-row">
             <label className="bridge-label" htmlFor="status-tool">
@@ -753,16 +753,16 @@ export function BridgePanel() {
 
       <div className="bridge-result-area" aria-live="polite">
         {tab === "status" ? (
-          showingList ? (
-            <ListView
-              report={listReport}
-              onBack={closeToolList}
+          showingDetails ? (
+            <DetailsView
+              report={detailsReport}
+              onBack={closeToolDetails}
               busy={busy}
             />
           ) : busy && !statusReport ? (
             <EmptyHint text="Loading…" />
           ) : (
-            <StatusView report={statusReport} onOpenTool={openToolList} />
+            <StatusView report={statusReport} onOpenTool={openToolDetails} />
           )
         ) : null}
         {tab === "diff" ? <DiffView report={diffReport} /> : null}

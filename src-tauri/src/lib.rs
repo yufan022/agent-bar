@@ -209,7 +209,7 @@ pub fn run() {
             get_agents_quota,
             refresh_quota,
             bridge::bridge_status,
-            bridge::bridge_list,
+            bridge::bridge_details,
             bridge::bridge_diff,
             bridge::bridge_sync,
         ])
