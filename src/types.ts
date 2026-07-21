@@ -97,7 +97,6 @@ export function formatTime(iso: string | null): string {
   });
 }
 
-
 export type BridgeToolId = "claude" | "codex" | "opencode" | "cursor";
 
 export const BRIDGE_TOOLS: { id: BridgeToolId; label: string }[] = [
@@ -113,6 +112,10 @@ export const BRIDGE_KINDS: { id: string; label: string }[] = [
   { id: "mcp", label: "MCP" },
 ];
 
+export function bridgeToolLabel(id: string): string {
+  return BRIDGE_TOOLS.find((t) => t.id === id)?.label ?? id;
+}
+
 export interface BridgeSyncRequest {
   from: string;
   to: string[];
@@ -122,7 +125,101 @@ export interface BridgeSyncRequest {
   force: boolean;
 }
 
+export interface PathPresence {
+  path: string;
+  exists: boolean;
+}
+
+export type InstructionsStatus =
+  | { state: "unsupported" }
+  | { state: "missing"; path: string }
+  | { state: "present"; path: string; realPath?: string; chars: number };
+
+export interface ToolStatus {
+  tool: string;
+  instructions: InstructionsStatus;
+  skillsDir: PathPresence;
+  mcpConfig: PathPresence;
+  skillCount: number;
+  mcpServerCount: number;
+}
+
+export interface StatusReport {
+  tools: ToolStatus[];
+}
+
+export interface SkillInfo {
+  name: string;
+  path: string;
+}
+
+export type ListInstructions =
+  | { state: "unsupported"; path: string }
+  | { state: "missing"; path: string }
+  | { state: "present"; path: string; chars: number };
+
+export interface ListReport {
+  tool: string;
+  skills: SkillInfo[];
+  mcpServers: string[];
+  instructions: ListInstructions;
+}
+
+export type DiffChange = "added" | "removed" | "same" | "changed";
+
+export interface NamedDiff {
+  name: string;
+  change: DiffChange;
+}
+
+export type InstructionsDiff =
+  | { state: "skipped"; reason: string }
+  | {
+      state: "compared";
+      identical: boolean;
+      fromPath?: string;
+      toPath?: string;
+      fromReal?: string;
+      toReal?: string;
+      summary: string;
+    };
+
+export interface DiffReport {
+  from: string;
+  to: string;
+  instructions: InstructionsDiff;
+  skills: NamedDiff[];
+  mcp: NamedDiff[];
+}
+
+export type SyncLineStatus = "info" | "ok" | "skip" | "plan" | "done" | "error";
+export type SyncCategory = "meta" | "instructions" | "skills" | "mcp";
+
+export interface SyncLine {
+  category: SyncCategory;
+  status: SyncLineStatus;
+  message: string;
+  name?: string;
+  path?: string;
+  linkTo?: string;
+  detail?: string[];
+}
+
+export interface SyncTargetReport {
+  tool: string;
+  items: SyncLine[];
+}
+
+export interface SyncReport {
+  sourceTool: string;
+  sourceHome: string;
+  dryRun: boolean;
+  notes: SyncLine[];
+  targets: SyncTargetReport[];
+  errors: string[];
+}
+
 export interface BridgeSyncResponse {
   ok: boolean;
-  report: string;
+  report: SyncReport;
 }

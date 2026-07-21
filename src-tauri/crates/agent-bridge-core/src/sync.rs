@@ -1,13 +1,17 @@
 //! Sync engine: copy/link resources from one tool to others.
 
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use crate::adapters::ToolAdapter;
 use crate::error::{Error, Result};
 use crate::instructions;
 use crate::mcp::{normalize_mcp_for_tool, sse_conversions_for_codex};
+use crate::report::{
+    DiffChange, DiffReport, InstructionsDiff, ListInstructions, ListReport, NamedDiff,
+    SkillInfo, StatusReport, SyncCategory, SyncLine, SyncLineStatus, SyncReport,
+    SyncTargetReport,
+};
 use crate::skills;
 use crate::tool::{SyncKinds, ToolId, WriteMode};
 
@@ -22,33 +26,6 @@ pub struct SyncOptions {
     pub force: bool,
     /// Optional home override for tests.
     pub home: Option<PathBuf>,
-}
-
-/// Human-readable report of a sync.
-#[derive(Debug, Default, Clone)]
-pub struct SyncReport {
-    pub lines: Vec<String>,
-    pub errors: Vec<String>,
-}
-
-impl SyncReport {
-    pub fn success(&self) -> bool {
-        self.errors.is_empty()
-    }
-
-    pub fn render(&self) -> String {
-        let mut out = String::new();
-        for line in &self.lines {
-            let _ = writeln!(out, "{line}");
-        }
-        if !self.errors.is_empty() {
-            let _ = writeln!(out, "\nErrors:");
-            for e in &self.errors {
-                let _ = writeln!(out, "  - {e}");
-            }
-        }
-        out
-    }
 }
 
 fn adapter(tool: ToolId, home: &Option<PathBuf>) -> Result<ToolAdapter> {
@@ -70,12 +47,14 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
     }
 
     let source = adapter(opts.from, &opts.home)?;
-    let mut report = SyncReport::default();
-    report.lines.push(format!(
-        "Source: {} ({})",
-        source.id(),
-        source.paths().home.display()
-    ));
+    let mut report = SyncReport {
+        source_tool: source.id().to_string(),
+        source_home: source.paths().home.display().to_string(),
+        dry_run: opts.dry_run,
+        notes: Vec::new(),
+        targets: Vec::new(),
+        errors: Vec::new(),
+    };
 
     let source_supports_instructions = source.supports_instructions();
     let source_instructions_path = if opts.kinds.instructions && source_supports_instructions {
@@ -96,31 +75,45 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
 
     if opts.kinds.instructions {
         if !source_supports_instructions {
-            report.lines.push(format!(
-                "  instructions: skipped ({} has no file-based instructions)",
-                source.id()
+            report.notes.push(SyncLine::item(
+                SyncCategory::Instructions,
+                SyncLineStatus::Skip,
+                format!(
+                    "instructions: skipped ({} has no file-based instructions)",
+                    source.id()
+                ),
             ));
         } else {
             match &source_instructions_path {
-                Some(path) => report.lines.push(format!(
-                    "  instructions source: {}",
-                    path.display()
+                Some(path) => report.notes.push(
+                    SyncLine::item(
+                        SyncCategory::Instructions,
+                        SyncLineStatus::Info,
+                        format!("instructions source: {}", path.display()),
+                    )
+                    .with_path(path.display().to_string()),
+                ),
+                None => report.notes.push(SyncLine::item(
+                    SyncCategory::Instructions,
+                    SyncLineStatus::Skip,
+                    "instructions: source file missing (skip links)",
                 )),
-                None => report
-                    .lines
-                    .push("  instructions: source file missing (skip links)".into()),
             }
         }
     }
     if opts.kinds.skills {
-        report
-            .lines
-            .push(format!("  read {} skill(s)", skills.len()));
+        report.notes.push(SyncLine::item(
+            SyncCategory::Skills,
+            SyncLineStatus::Info,
+            format!("read {} skill(s)", skills.len()),
+        ));
     }
     if opts.kinds.mcp {
-        report
-            .lines
-            .push(format!("  read {} MCP server(s)", mcp.servers.len()));
+        report.notes.push(SyncLine::item(
+            SyncCategory::Mcp,
+            SyncLineStatus::Info,
+            format!("read {} MCP server(s)", mcp.servers.len()),
+        ));
     }
 
     let write_mode = if opts.prune {
@@ -131,25 +124,28 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
 
     for target_id in &opts.to {
         let target = adapter(*target_id, &opts.home)?;
-        report.lines.push(format!("\nTarget: {}", target.id()));
+        let mut items = Vec::new();
 
         if opts.kinds.instructions {
             if !target.supports_instructions() {
-                report.lines.push(format!(
-                    "  instructions: skipped ({} has no file-based instructions)",
-                    target.id()
+                items.push(SyncLine::item(
+                    SyncCategory::Instructions,
+                    SyncLineStatus::Skip,
+                    format!(
+                        "instructions: skipped ({} has no file-based instructions)",
+                        target.id()
+                    ),
                 ));
             } else if let Some(source_real) = &source_instructions_path {
                 if let Some(link_path) = target.instructions_path() {
                     let target_real = target.instructions_real_path()?;
                     if target_real.as_ref() == Some(source_real) {
-                        report.lines.push("  instructions: unchanged".into());
-                    } else if opts.dry_run {
-                        report.lines.push(format!(
-                            "  instructions: would symlink {} -> {}",
-                            link_path.display(),
-                            source_real.display()
+                        items.push(SyncLine::item(
+                            SyncCategory::Instructions,
+                            SyncLineStatus::Ok,
+                            "instructions: unchanged",
                         ));
+                    } else if opts.dry_run {
                         let src_body = source.read_instructions()?.unwrap_or_default();
                         let dst_body = target.read_instructions()?.unwrap_or_default();
                         let comparison = instructions::format_instructions_comparison(
@@ -162,67 +158,112 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
                             &src_body,
                             &dst_body,
                         );
-                        for line in comparison.lines() {
-                            report.lines.push(line.to_string());
-                        }
+                        let detail: Vec<String> = comparison.lines().map(str::to_string).collect();
+                        items.push(
+                            SyncLine::item(
+                                SyncCategory::Instructions,
+                                SyncLineStatus::Plan,
+                                format!(
+                                    "instructions: would symlink {} -> {}",
+                                    link_path.display(),
+                                    source_real.display()
+                                ),
+                            )
+                            .with_path(link_path.display().to_string())
+                            .with_link_to(source_real.display().to_string())
+                            .with_detail(detail),
+                        );
                     } else {
                         match target.link_instructions(source_real, opts.force) {
-                            Ok(action) => report.lines.push(format!(
-                                "  instructions: {:?} {} -> {}",
-                                action,
-                                link_path.display(),
-                                source_real.display()
-                            )),
+                            Ok(action) => items.push(
+                                SyncLine::item(
+                                    SyncCategory::Instructions,
+                                    SyncLineStatus::Done,
+                                    format!(
+                                        "instructions: {:?} {} -> {}",
+                                        action,
+                                        link_path.display(),
+                                        source_real.display()
+                                    ),
+                                )
+                                .with_path(link_path.display().to_string())
+                                .with_link_to(source_real.display().to_string()),
+                            ),
                             Err(e) => {
-                                report.errors.push(format!(
-                                    "{} instructions: {e}",
-                                    target.id()
+                                report.push_error(format!("{} instructions: {e}", target.id()));
+                                items.push(SyncLine::item(
+                                    SyncCategory::Instructions,
+                                    SyncLineStatus::Error,
+                                    format!("instructions: ERROR {e}"),
                                 ));
-                                report.lines.push(format!("  instructions: ERROR {e}"));
                             }
                         }
                     }
                 }
             } else {
-                report
-                    .lines
-                    .push("  instructions: skipped (source missing or unsupported)".into());
+                items.push(SyncLine::item(
+                    SyncCategory::Instructions,
+                    SyncLineStatus::Skip,
+                    "instructions: skipped (source missing or unsupported)",
+                ));
             }
         }
 
         if opts.kinds.skills {
             if !target.supports_skills_sync() {
-                report.lines.push(format!(
-                    "  skills: skipped ({} skill sync is disabled)",
-                    target.id()
+                items.push(SyncLine::item(
+                    SyncCategory::Skills,
+                    SyncLineStatus::Skip,
+                    format!(
+                        "skills: skipped ({} skill sync is disabled)",
+                        target.id()
+                    ),
                 ));
             } else {
                 let keep: BTreeSet<String> = skills.iter().map(|s| s.name.clone()).collect();
                 for skill in &skills {
                     if opts.dry_run {
                         let link = target.paths().skill_dir(&skill.name);
-                        report.lines.push(format!(
-                            "  skill '{}': would symlink {} -> {}",
-                            skill.name,
-                            link.display(),
-                            skill.real_path.display()
-                        ));
+                        items.push(
+                            SyncLine::item(
+                                SyncCategory::Skills,
+                                SyncLineStatus::Plan,
+                                format!(
+                                    "skill '{}': would symlink {} -> {}",
+                                    skill.name,
+                                    link.display(),
+                                    skill.real_path.display()
+                                ),
+                            )
+                            .with_name(skill.name.clone())
+                            .with_path(link.display().to_string())
+                            .with_link_to(skill.real_path.display().to_string()),
+                        );
                         continue;
                     }
                     match target.link_skill(&skill.name, &skill.real_path, opts.force) {
-                        Ok(action) => report.lines.push(format!(
-                            "  skill '{}': {:?}",
-                            skill.name, action
-                        )),
+                        Ok(action) => items.push(
+                            SyncLine::item(
+                                SyncCategory::Skills,
+                                SyncLineStatus::Done,
+                                format!("skill '{}': {:?}", skill.name, action),
+                            )
+                            .with_name(skill.name.clone()),
+                        ),
                         Err(e) => {
-                            report.errors.push(format!(
+                            report.push_error(format!(
                                 "{} skill '{}': {e}",
                                 target.id(),
                                 skill.name
                             ));
-                            report
-                                .lines
-                                .push(format!("  skill '{}': ERROR {e}", skill.name));
+                            items.push(
+                                SyncLine::item(
+                                    SyncCategory::Skills,
+                                    SyncLineStatus::Error,
+                                    format!("skill '{}': ERROR {e}", skill.name),
+                                )
+                                .with_name(skill.name.clone()),
+                            );
                         }
                     }
                 }
@@ -235,14 +276,21 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
                             Some(&source_skills),
                         )?;
                         if orphans.is_empty() {
-                            report
-                                .lines
-                                .push("  skills prune: no orphan symlinks".into());
+                            items.push(SyncLine::item(
+                                SyncCategory::Skills,
+                                SyncLineStatus::Ok,
+                                "skills prune: no orphan symlinks",
+                            ));
                         } else {
                             for name in orphans {
-                                report
-                                    .lines
-                                    .push(format!("  skill '{name}': would prune symlink"));
+                                items.push(
+                                    SyncLine::item(
+                                        SyncCategory::Skills,
+                                        SyncLineStatus::Plan,
+                                        format!("skill '{name}': would prune symlink"),
+                                    )
+                                    .with_name(name),
+                                );
                             }
                         }
                     } else {
@@ -252,9 +300,14 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
                             Some(&source_skills),
                         )?;
                         for name in removed {
-                            report
-                                .lines
-                                .push(format!("  skill '{name}': pruned symlink"));
+                            items.push(
+                                SyncLine::item(
+                                    SyncCategory::Skills,
+                                    SyncLineStatus::Done,
+                                    format!("skill '{name}': pruned symlink"),
+                                )
+                                .with_name(name),
+                            );
                         }
                     }
                 }
@@ -266,82 +319,104 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
             let to_write = normalize_mcp_for_tool(*target_id, &mcp);
             if *target_id == ToolId::Codex {
                 for name in sse_conversions_for_codex(&mcp) {
-                    report.lines.push(format!(
-                        "  mcp '{name}': converting SSE → streamable HTTP for Codex"
-                    ));
+                    items.push(
+                        SyncLine::item(
+                            SyncCategory::Mcp,
+                            SyncLineStatus::Info,
+                            format!(
+                                "mcp '{name}': converting SSE → streamable HTTP for Codex"
+                            ),
+                        )
+                        .with_name(name),
+                    );
                 }
             }
             if existing == to_write && write_mode == WriteMode::Safe {
-                report.lines.push("  mcp: unchanged".into());
-            } else if opts.dry_run {
-                report.lines.push(format!(
-                    "  mcp: would write {} server(s) ({write_mode:?})",
-                    to_write.servers.len()
+                items.push(SyncLine::item(
+                    SyncCategory::Mcp,
+                    SyncLineStatus::Ok,
+                    "mcp: unchanged",
                 ));
+            } else if opts.dry_run {
                 let src_names: BTreeSet<_> = to_write.servers.keys().cloned().collect();
                 let dst_names: BTreeSet<_> = existing.servers.keys().cloned().collect();
+                let mut detail = Vec::new();
                 for n in src_names.difference(&dst_names) {
-                    report.lines.push(format!("    + {n}"));
+                    detail.push(format!("+ {n}"));
                 }
                 for n in dst_names.difference(&src_names) {
                     if write_mode == WriteMode::Prune {
-                        report.lines.push(format!("    - {n}"));
+                        detail.push(format!("- {n}"));
                     }
                 }
                 for n in src_names.intersection(&dst_names) {
                     if existing.servers.get(n) != to_write.servers.get(n) {
-                        report.lines.push(format!("    ~ {n}"));
+                        detail.push(format!("~ {n}"));
                     }
                 }
+                items.push(
+                    SyncLine::item(
+                        SyncCategory::Mcp,
+                        SyncLineStatus::Plan,
+                        format!(
+                            "mcp: would write {} server(s) ({write_mode:?})",
+                            to_write.servers.len()
+                        ),
+                    )
+                    .with_detail(detail),
+                );
             } else {
                 target.write_mcp(&mcp, write_mode)?;
-                report.lines.push(format!(
-                    "  mcp: wrote {} ({:?})",
-                    target.paths().mcp_config.display(),
-                    write_mode
-                ));
+                items.push(
+                    SyncLine::item(
+                        SyncCategory::Mcp,
+                        SyncLineStatus::Done,
+                        format!(
+                            "mcp: wrote {} ({:?})",
+                            target.paths().mcp_config.display(),
+                            write_mode
+                        ),
+                    )
+                    .with_path(target.paths().mcp_config.display().to_string()),
+                );
             }
         }
+
+        report.targets.push(SyncTargetReport {
+            tool: target.id().to_string(),
+            items,
+        });
     }
 
     Ok(report)
 }
 
 /// Diff instructions / skills / mcp between two tools.
-pub fn diff(from: ToolId, to: ToolId, home: Option<PathBuf>) -> Result<String> {
+pub fn diff(from: ToolId, to: ToolId, home: Option<PathBuf>) -> Result<DiffReport> {
     if from == to {
         return Err(Error::SameSourceAndTarget(from.to_string()));
     }
     let source = adapter(from, &home)?;
     let target = adapter(to, &home)?;
-    let mut out = String::new();
 
-    let _ = writeln!(out, "## Instructions");
-    match (source.supports_instructions(), target.supports_instructions()) {
-        (false, false) => {
-            let _ = writeln!(
-                out,
-                "(skipped: neither {from} nor {to} supports file-based instructions)"
-            );
-        }
-        (false, true) => {
-            let _ = writeln!(
-                out,
-                "(skipped: {from} does not support file-based instructions)"
-            );
-        }
-        (true, false) => {
-            let _ = writeln!(
-                out,
-                "(skipped: {to} does not support file-based instructions)"
-            );
-        }
+    let instructions = match (source.supports_instructions(), target.supports_instructions()) {
+        (false, false) => InstructionsDiff::Skipped {
+            reason: format!(
+                "skipped: neither {from} nor {to} supports file-based instructions"
+            ),
+        },
+        (false, true) => InstructionsDiff::Skipped {
+            reason: format!("skipped: {from} does not support file-based instructions"),
+        },
+        (true, false) => InstructionsDiff::Skipped {
+            reason: format!("skipped: {to} does not support file-based instructions"),
+        },
         (true, true) => {
             let src_real = source.instructions_real_path()?;
             let dst_real = target.instructions_real_path()?;
             let src_i = source.read_instructions()?.unwrap_or_default();
             let dst_i = target.read_instructions()?.unwrap_or_default();
-            out.push_str(&instructions::format_instructions_comparison(
+            let summary = instructions::format_instructions_comparison(
                 &format!("{from}"),
                 &format!("{to}"),
                 source.instructions_path(),
@@ -350,11 +425,21 @@ pub fn diff(from: ToolId, to: ToolId, home: Option<PathBuf>) -> Result<String> {
                 dst_real.as_deref(),
                 &src_i,
                 &dst_i,
-            ));
+            );
+            let identical = src_real == dst_real;
+            InstructionsDiff::Compared {
+                identical,
+                from_path: source
+                    .instructions_path()
+                    .map(|p| p.display().to_string()),
+                to_path: target.instructions_path().map(|p| p.display().to_string()),
+                from_real: src_real.as_ref().map(|p| p.display().to_string()),
+                to_real: dst_real.as_ref().map(|p| p.display().to_string()),
+                summary,
+            }
         }
-    }
+    };
 
-    let _ = writeln!(out, "\n## Skills");
     let src_skills: BTreeSet<_> = source
         .list_skills()?
         .into_iter()
@@ -365,111 +450,122 @@ pub fn diff(from: ToolId, to: ToolId, home: Option<PathBuf>) -> Result<String> {
         .into_iter()
         .map(|s| s.name)
         .collect();
+    let mut skills = Vec::new();
     for n in src_skills.difference(&dst_skills) {
-        let _ = writeln!(out, "+ {n}");
+        skills.push(NamedDiff {
+            name: n.clone(),
+            change: DiffChange::Added,
+        });
     }
     for n in dst_skills.difference(&src_skills) {
-        let _ = writeln!(out, "- {n}");
+        skills.push(NamedDiff {
+            name: n.clone(),
+            change: DiffChange::Removed,
+        });
     }
     for n in src_skills.intersection(&dst_skills) {
-        let _ = writeln!(out, "= {n}");
+        skills.push(NamedDiff {
+            name: n.clone(),
+            change: DiffChange::Same,
+        });
     }
-    if src_skills.is_empty() && dst_skills.is_empty() {
-        let _ = writeln!(out, "(none)");
-    }
+    skills.sort_by(|a, b| a.name.cmp(&b.name));
 
-    let _ = writeln!(out, "\n## MCP");
     let src_mcp = source.read_mcp()?;
     let dst_mcp = target.read_mcp()?;
-    // Compare using the target-normalized source so SSE→streamable HTTP for Codex
-    // does not show as a perpetual drift.
     let src_for_target = normalize_mcp_for_tool(to, &src_mcp);
     let src_names: BTreeSet<_> = src_for_target.servers.keys().cloned().collect();
     let dst_names: BTreeSet<_> = dst_mcp.servers.keys().cloned().collect();
+    let mut mcp_diff = Vec::new();
     for n in src_names.difference(&dst_names) {
-        let _ = writeln!(out, "+ {n}");
+        mcp_diff.push(NamedDiff {
+            name: n.clone(),
+            change: DiffChange::Added,
+        });
     }
     for n in dst_names.difference(&src_names) {
-        let _ = writeln!(out, "- {n}");
+        mcp_diff.push(NamedDiff {
+            name: n.clone(),
+            change: DiffChange::Removed,
+        });
     }
     for n in src_names.intersection(&dst_names) {
-        if src_for_target.servers.get(n) == dst_mcp.servers.get(n) {
-            let _ = writeln!(out, "= {n}");
+        let change = if src_for_target.servers.get(n) == dst_mcp.servers.get(n) {
+            DiffChange::Same
         } else {
-            let _ = writeln!(out, "~ {n}");
-        }
+            DiffChange::Changed
+        };
+        mcp_diff.push(NamedDiff {
+            name: n.clone(),
+            change,
+        });
     }
-    if src_names.is_empty() && dst_names.is_empty() {
-        let _ = writeln!(out, "(none)");
-    }
+    mcp_diff.sort_by(|a, b| a.name.cmp(&b.name));
 
-    Ok(out)
+    Ok(DiffReport {
+        from: from.to_string(),
+        to: to.to_string(),
+        instructions,
+        skills,
+        mcp: mcp_diff,
+    })
 }
 
 /// Status for all tools (or one).
-pub fn status(tool: Option<ToolId>, home: Option<PathBuf>) -> Result<String> {
+pub fn status(tool: Option<ToolId>, home: Option<PathBuf>) -> Result<StatusReport> {
     let tools: Vec<ToolId> = match tool {
         Some(t) => vec![t],
         None => ToolId::ALL.to_vec(),
     };
-    let mut out = String::new();
+    let mut statuses = Vec::new();
     for t in tools {
         let adapter = adapter(t, &home)?;
-        for line in adapter.status_lines()? {
-            let _ = writeln!(out, "{line}");
-        }
-        let _ = writeln!(out);
+        statuses.push(adapter.tool_status()?);
     }
-    Ok(out)
+    Ok(StatusReport { tools: statuses })
 }
 
 /// List skills and MCP server names for a tool.
-pub fn list(tool: ToolId, home: Option<PathBuf>) -> Result<String> {
+pub fn list(tool: ToolId, home: Option<PathBuf>) -> Result<ListReport> {
     let adapter = adapter(tool, &home)?;
-    let mut out = String::new();
-    let _ = writeln!(out, "Tool: {tool}");
-    let _ = writeln!(out, "\nSkills:");
-    let skills = adapter.list_skills()?;
-    if skills.is_empty() {
-        let _ = writeln!(out, "  (none)");
-    } else {
-        for s in skills {
-            let _ = writeln!(out, "  - {} ({})", s.name, s.real_path.display());
-        }
-    }
-    let _ = writeln!(out, "\nMCP servers:");
+    let skills = adapter
+        .list_skills()?
+        .into_iter()
+        .map(|s| SkillInfo {
+            name: s.name,
+            path: s.real_path.display().to_string(),
+        })
+        .collect();
     let mcp = adapter.read_mcp()?;
-    if mcp.servers.is_empty() {
-        let _ = writeln!(out, "  (none)");
-    } else {
-        for name in mcp.names() {
-            let _ = writeln!(out, "  - {name}");
+    let mcp_servers = mcp.names().into_iter().map(str::to_string).collect();
+    let instructions = if !adapter.supports_instructions() {
+        ListInstructions::Unsupported {
+            path: adapter.instructions_path_display(),
         }
-    }
-    let _ = writeln!(
-        out,
-        "\nInstructions: {}",
-        adapter.instructions_path_display()
-    );
-    if !adapter.supports_instructions() {
-        let _ = writeln!(out, "  unsupported (no stable file API)");
     } else {
         match adapter.read_instructions()? {
-            Some(body) => {
-                let _ = writeln!(out, "  present ({} chars)", body.chars().count());
-            }
-            None => {
-                let _ = writeln!(out, "  missing");
-            }
+            Some(body) => ListInstructions::Present {
+                path: adapter.instructions_path_display(),
+                chars: body.chars().count(),
+            },
+            None => ListInstructions::Missing {
+                path: adapter.instructions_path_display(),
+            },
         }
-    }
-    Ok(out)
+    };
+    Ok(ListReport {
+        tool: tool.to_string(),
+        skills,
+        mcp_servers,
+        instructions,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::mcp::{McpDocument, McpServer, McpTransport};
+    use crate::report::RenderText;
     use std::collections::BTreeMap;
     use std::fs;
     use tempfile::tempdir;
@@ -740,10 +836,11 @@ mod tests {
         let _ = fs::write(home.join(".claude/CLAUDE.md"), "alpha\n");
         let _ = fs::write(home.join(".codex/AGENTS.md"), "beta\n");
 
-        let out = match diff(ToolId::Claude, ToolId::Codex, Some(home.to_path_buf())) {
-            Ok(s) => s,
+        let report = match diff(ToolId::Claude, ToolId::Codex, Some(home.to_path_buf())) {
+            Ok(r) => r,
             Err(e) => panic!("{e}"),
         };
+        let out = report.render();
         assert!(out.contains("## Instructions"), "{out}");
         assert!(out.contains("claude:"), "{out}");
         assert!(out.contains("codex:"), "{out}");

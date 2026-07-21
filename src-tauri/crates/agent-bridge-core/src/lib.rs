@@ -12,6 +12,7 @@ pub mod fsutil;
 pub mod instructions;
 pub mod mcp;
 pub mod paths;
+pub mod report;
 pub mod skills;
 pub mod symlink;
 pub mod sync;
@@ -20,5 +21,10 @@ pub mod tool;
 pub use adapters::ToolAdapter;
 pub use error::{Error, Result};
 pub use paths::ToolPaths;
-pub use sync::{diff, list, status, sync, SyncOptions, SyncReport};
+pub use report::{
+    DiffChange, DiffReport, InstructionsDiff, InstructionsStatus, ListInstructions, ListReport,
+    NamedDiff, PathPresence, RenderText, SkillInfo, StatusReport, SyncCategory, SyncLine,
+    SyncLineStatus, SyncReport, SyncTargetReport, ToolStatus,
+};
+pub use sync::{diff, list, status, sync, SyncOptions};
 pub use tool::{SyncKinds, ToolId, WriteMode};

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use agent_bridge_core::{diff, list, status, sync, SyncKinds, SyncOptions, ToolId};
+use agent_bridge_core::{diff, list, status, sync, RenderText, SyncKinds, SyncOptions, ToolId};
 use clap::Subcommand;
 
 /// Bridge subcommands shared by `agent-bridge` and `agent-bar bridge`.
@@ -96,8 +96,8 @@ pub fn run_bridge(command: BridgeCommands, home: Option<PathBuf>) -> Result<(), 
         BridgeCommands::Diff { from, to } => {
             let from = parse_tool(&from)?;
             let to = parse_tool(&to)?;
-            let text = diff(from, to, home).map_err(|e| e.to_string())?;
-            print!("{text}");
+            let report = diff(from, to, home).map_err(|e| e.to_string())?;
+            print!("{}", report.render());
             Ok(())
         }
         BridgeCommands::Status { tool } => {
@@ -105,14 +105,14 @@ pub fn run_bridge(command: BridgeCommands, home: Option<PathBuf>) -> Result<(), 
                 Some(t) => Some(parse_tool(&t)?),
                 None => None,
             };
-            let text = status(tool, home).map_err(|e| e.to_string())?;
-            print!("{text}");
+            let report = status(tool, home).map_err(|e| e.to_string())?;
+            print!("{}", report.render());
             Ok(())
         }
         BridgeCommands::List { tool } => {
             let tool = parse_tool(&tool)?;
-            let text = list(tool, home).map_err(|e| e.to_string())?;
-            print!("{text}");
+            let report = list(tool, home).map_err(|e| e.to_string())?;
+            print!("{}", report.render());
             Ok(())
         }
     }

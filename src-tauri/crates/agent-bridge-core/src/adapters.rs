@@ -110,54 +110,42 @@ impl ToolAdapter {
         }
     }
 
-    pub fn status_lines(&self) -> Result<Vec<String>> {
-        let mut lines = Vec::new();
-        let instr_supported = self.supports_instructions();
-        let instr = self
-            .paths
-            .instructions
-            .as_ref()
-            .is_some_and(|p| p.exists());
-        let skills = self.paths.skills_dir.exists();
-        let mcp = self.paths.mcp_config.exists();
-        lines.push(format!(
-            "{}: instructions={} skills_dir={} mcp={}",
-            self.id(),
-            if instr_supported {
-                bool_mark(instr)
-            } else {
-                "n/a"
-            },
-            bool_mark(skills),
-            bool_mark(mcp)
-        ));
-        lines.push(format!(
-            "  instructions: {}",
-            self.instructions_path_display()
-        ));
-        if let Some(real) = self.instructions_real_path()? {
-            lines.push(format!("  instructions_real: {}", real.display()));
-        }
-        lines.push(format!("  skills:       {}", self.paths.skills_dir.display()));
-        lines.push(format!("  mcp:          {}", self.paths.mcp_config.display()));
-        if instr_supported {
-            if let Some(body) = self.read_instructions()? {
-                let chars = body.chars().count();
-                lines.push(format!("  instructions_chars: {chars}"));
-            }
-        }
-        let skill_list = self.list_skills()?;
-        lines.push(format!("  skill_count: {}", skill_list.len()));
-        let mcp_doc = self.read_mcp()?;
-        lines.push(format!("  mcp_server_count: {}", mcp_doc.servers.len()));
-        Ok(lines)
-    }
-}
+    /// Structured status snapshot for this tool.
+    pub fn tool_status(&self) -> Result<crate::report::ToolStatus> {
+        use crate::report::{InstructionsStatus, PathPresence, ToolStatus};
 
-fn bool_mark(v: bool) -> &'static str {
-    if v {
-        "yes"
-    } else {
-        "no"
+        let instructions = if !self.supports_instructions() {
+            InstructionsStatus::Unsupported
+        } else {
+            let path = self.instructions_path_display();
+            match self.read_instructions()? {
+                Some(body) => InstructionsStatus::Present {
+                    path,
+                    real_path: self
+                        .instructions_real_path()?
+                        .map(|p| p.display().to_string()),
+                    chars: body.chars().count(),
+                },
+                None => InstructionsStatus::Missing { path },
+            }
+        };
+
+        let skill_list = self.list_skills()?;
+        let mcp_doc = self.read_mcp()?;
+
+        Ok(ToolStatus {
+            tool: self.id().to_string(),
+            instructions,
+            skills_dir: PathPresence {
+                path: self.paths.skills_dir.display().to_string(),
+                exists: self.paths.skills_dir.exists(),
+            },
+            mcp_config: PathPresence {
+                path: self.paths.mcp_config.display().to_string(),
+                exists: self.paths.mcp_config.exists(),
+            },
+            skill_count: skill_list.len(),
+            mcp_server_count: mcp_doc.servers.len(),
+        })
     }
 }

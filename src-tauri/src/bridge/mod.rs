@@ -1,6 +1,9 @@
 //! Tauri commands wrapping agent-bridge-core.
 
-use agent_bridge_core::{diff, list, status, sync, SyncKinds, SyncOptions, ToolId};
+use agent_bridge_core::{
+    diff, list, status, sync, DiffReport, ListReport, StatusReport, SyncKinds, SyncOptions,
+    SyncReport, ToolId,
+};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -25,7 +28,7 @@ pub struct BridgeSyncRequest {
 #[serde(rename_all = "camelCase")]
 pub struct BridgeSyncResponse {
     pub ok: bool,
-    pub report: String,
+    pub report: SyncReport,
 }
 
 fn parse_tool(s: &str) -> Result<ToolId, AppError> {
@@ -33,7 +36,7 @@ fn parse_tool(s: &str) -> Result<ToolId, AppError> {
 }
 
 #[tauri::command]
-pub async fn bridge_status(tool: Option<String>) -> Result<String, AppError> {
+pub async fn bridge_status(tool: Option<String>) -> Result<StatusReport, AppError> {
     let tool = match tool {
         Some(t) if !t.is_empty() => Some(parse_tool(&t)?),
         _ => None,
@@ -45,7 +48,7 @@ pub async fn bridge_status(tool: Option<String>) -> Result<String, AppError> {
 }
 
 #[tauri::command]
-pub async fn bridge_list(tool: String) -> Result<String, AppError> {
+pub async fn bridge_list(tool: String) -> Result<ListReport, AppError> {
     let tool = parse_tool(&tool)?;
     tauri::async_runtime::spawn_blocking(move || list(tool, None))
         .await
@@ -54,7 +57,7 @@ pub async fn bridge_list(tool: String) -> Result<String, AppError> {
 }
 
 #[tauri::command]
-pub async fn bridge_diff(from: String, to: String) -> Result<String, AppError> {
+pub async fn bridge_diff(from: String, to: String) -> Result<DiffReport, AppError> {
     let from = parse_tool(&from)?;
     let to = parse_tool(&to)?;
     tauri::async_runtime::spawn_blocking(move || diff(from, to, None))
@@ -87,6 +90,6 @@ pub async fn bridge_sync(req: BridgeSyncRequest) -> Result<BridgeSyncResponse, A
         .map_err(AppError::from)?;
     Ok(BridgeSyncResponse {
         ok: report.success(),
-        report: report.render(),
+        report,
     })
 }
