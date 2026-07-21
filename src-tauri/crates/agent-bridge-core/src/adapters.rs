@@ -40,6 +40,10 @@ impl ToolAdapter {
         self.paths.supports_instructions()
     }
 
+    pub fn supports_skills_sync(&self) -> bool {
+        self.paths.supports_skills_sync()
+    }
+
     pub fn instructions_path(&self) -> Option<&Path> {
         self.paths.instructions.as_deref()
     }

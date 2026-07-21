@@ -65,6 +65,13 @@ impl ToolPaths {
         self.instructions.is_some()
     }
 
+    /// Whether this tool accepts skill sync from agent-bridge.
+    ///
+    /// Cursor skill sync is intentionally disabled; only MCP is written there.
+    pub fn supports_skills_sync(&self) -> bool {
+        self.tool != ToolId::Cursor
+    }
+
     pub fn skill_dir(&self, name: &str) -> PathBuf {
         self.skills_dir.join(name)
     }
@@ -133,6 +140,7 @@ mod tests {
         let p = ToolPaths::for_tool_in_home(ToolId::Cursor, Path::new("/tmp/home"));
         assert!(p.instructions.is_none());
         assert!(!p.supports_instructions());
+        assert!(!p.supports_skills_sync());
         assert_eq!(p.skills_dir, Path::new("/tmp/home/.cursor/skills"));
         assert_eq!(p.mcp_config, Path::new("/tmp/home/.cursor/mcp.json"));
     }

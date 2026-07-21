@@ -37,11 +37,11 @@ Sync **user-global** instructions, skills, and MCP between:
 | Claude | `~/.claude/CLAUDE.md` | `~/.claude/skills/` | `~/.claude.json` |
 | Codex | `~/.codex/AGENTS.md` | `~/.codex/skills/` | `~/.codex/config.toml` |
 | OpenCode | `~/.config/opencode/AGENTS.md` | `~/.config/opencode/skills/` | `~/.config/opencode/opencode.json` |
-| Cursor | *(not supported)* | `~/.cursor/skills/` | `~/.cursor/mcp.json` |
+| Cursor | *(not supported)* | *(not synced)* | `~/.cursor/mcp.json` |
 
 - Instructions / skills: symlink to the source real path
 - MCP: convert via an internal IR and merge safely (other config keys preserved)
-- Cursor has no stable file-based User Rules API, so instructions are skipped for Cursor
+- Cursor has no stable file-based User Rules API, so instructions are skipped; skill sync to Cursor is also disabled (only MCP is written)
 
 In the popover, open **Bridge** (icon next to Settings) for Status / Sync / Diff / List.
 

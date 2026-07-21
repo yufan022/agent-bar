@@ -191,58 +191,71 @@ pub fn sync(opts: &SyncOptions) -> Result<SyncReport> {
         }
 
         if opts.kinds.skills {
-            let keep: BTreeSet<String> = skills.iter().map(|s| s.name.clone()).collect();
-            for skill in &skills {
-                if opts.dry_run {
-                    let link = target.paths().skill_dir(&skill.name);
-                    report.lines.push(format!(
-                        "  skill '{}': would symlink {} -> {}",
-                        skill.name,
-                        link.display(),
-                        skill.real_path.display()
-                    ));
-                    continue;
-                }
-                match target.link_skill(&skill.name, &skill.real_path, opts.force) {
-                    Ok(action) => report.lines.push(format!(
-                        "  skill '{}': {:?}",
-                        skill.name, action
-                    )),
-                    Err(e) => {
-                        report.errors.push(format!("{} skill '{}': {e}", target.id(), skill.name));
-                        report.lines.push(format!("  skill '{}': ERROR {e}", skill.name));
+            if !target.supports_skills_sync() {
+                report.lines.push(format!(
+                    "  skills: skipped ({} skill sync is disabled)",
+                    target.id()
+                ));
+            } else {
+                let keep: BTreeSet<String> = skills.iter().map(|s| s.name.clone()).collect();
+                for skill in &skills {
+                    if opts.dry_run {
+                        let link = target.paths().skill_dir(&skill.name);
+                        report.lines.push(format!(
+                            "  skill '{}': would symlink {} -> {}",
+                            skill.name,
+                            link.display(),
+                            skill.real_path.display()
+                        ));
+                        continue;
                     }
-                }
-            }
-            if opts.prune {
-                let source_skills = source.paths().skills_dir.clone();
-                if opts.dry_run {
-                    let orphans = skills::list_orphan_skill_links(
-                        &target.paths().skills_dir,
-                        &keep,
-                        Some(&source_skills),
-                    )?;
-                    if orphans.is_empty() {
-                        report
-                            .lines
-                            .push("  skills prune: no orphan symlinks".into());
-                    } else {
-                        for name in orphans {
+                    match target.link_skill(&skill.name, &skill.real_path, opts.force) {
+                        Ok(action) => report.lines.push(format!(
+                            "  skill '{}': {:?}",
+                            skill.name, action
+                        )),
+                        Err(e) => {
+                            report.errors.push(format!(
+                                "{} skill '{}': {e}",
+                                target.id(),
+                                skill.name
+                            ));
                             report
                                 .lines
-                                .push(format!("  skill '{name}': would prune symlink"));
+                                .push(format!("  skill '{}': ERROR {e}", skill.name));
                         }
                     }
-                } else {
-                    let removed = skills::prune_skill_links(
-                        &target.paths().skills_dir,
-                        &keep,
-                        Some(&source_skills),
-                    )?;
-                    for name in removed {
-                        report
-                            .lines
-                            .push(format!("  skill '{name}': pruned symlink"));
+                }
+                if opts.prune {
+                    let source_skills = source.paths().skills_dir.clone();
+                    if opts.dry_run {
+                        let orphans = skills::list_orphan_skill_links(
+                            &target.paths().skills_dir,
+                            &keep,
+                            Some(&source_skills),
+                        )?;
+                        if orphans.is_empty() {
+                            report
+                                .lines
+                                .push("  skills prune: no orphan symlinks".into());
+                        } else {
+                            for name in orphans {
+                                report
+                                    .lines
+                                    .push(format!("  skill '{name}': would prune symlink"));
+                            }
+                        }
+                    } else {
+                        let removed = skills::prune_skill_links(
+                            &target.paths().skills_dir,
+                            &keep,
+                            Some(&source_skills),
+                        )?;
+                        for name in removed {
+                            report
+                                .lines
+                                .push(format!("  skill '{name}': pruned symlink"));
+                        }
                     }
                 }
             }
@@ -516,18 +529,18 @@ mod tests {
             "expected cursor instructions skip, got:\n{}",
             report.render()
         );
+        assert!(
+            report
+                .render()
+                .contains("skills: skipped (cursor skill sync is disabled)"),
+            "expected cursor skills skip, got:\n{}",
+            report.render()
+        );
 
         let cursor = ToolAdapter::in_home(ToolId::Cursor, home);
         assert!(cursor.read_instructions().ok().flatten().is_none());
         assert!(!home.join(".cursor/rules/agent-bridge.mdc").exists());
-
-        let skill_link = home.join(".cursor/skills/demo");
-        assert!(
-            skill_link
-                .symlink_metadata()
-                .map(|m| m.file_type().is_symlink())
-                .unwrap_or(false)
-        );
+        assert!(!home.join(".cursor/skills/demo").exists());
 
         let cursor_mcp = match cursor.read_mcp() {
             Ok(d) => d,
