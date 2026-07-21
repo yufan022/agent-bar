@@ -41,7 +41,7 @@ async fn refresh_quota(
     state: tauri::State<'_, AppState>,
 ) -> Result<AgentsQuotaResponse, AppError> {
     let response = refresh_and_store(state.inner()).await?;
-    update_tray_title(&app, &response);
+    update_tray(&app, &response);
     Ok(response)
 }
 
@@ -55,16 +55,10 @@ async fn refresh_and_store(state: &AppState) -> Result<AgentsQuotaResponse, AppE
     Ok(response)
 }
 
-fn update_tray_title(app: &AppHandle, response: &AgentsQuotaResponse) {
-    let label = response
-        .agents
-        .iter()
-        .find(|a| a.provider_id == "cursor")
-        .map(|a| a.tray_label.clone())
-        .unwrap_or_else(|| "agent-bar".to_string());
-
+fn update_tray(app: &AppHandle, response: &AgentsQuotaResponse) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_title(Some(&label));
+        // Icon-only menu bar; quota details stay in the tooltip.
+        let _ = tray.set_title(None::<&str>);
         let _ = tray.set_tooltip(Some(&format_tooltip(response)));
     }
 }
@@ -142,7 +136,6 @@ fn build_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error::Error>> {
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .icon_as_template(true)
-        .title("agent-bar")
         .tooltip("agent-bar")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -155,7 +148,7 @@ fn build_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error::Error>> {
                 tauri::async_runtime::spawn(async move {
                     let state = app_handle.state::<AppState>();
                     if let Ok(response) = refresh_and_store(state.inner()).await {
-                        update_tray_title(&app_handle, &response);
+                        update_tray(&app_handle, &response);
                         let _ = app_handle.emit("quota-updated", &response);
                     }
                 });
@@ -192,7 +185,7 @@ fn spawn_poll_loop(app: AppHandle) {
             {
                 let state = app.state::<AppState>();
                 if let Ok(response) = refresh_and_store(state.inner()).await {
-                    update_tray_title(&app, &response);
+                    update_tray(&app, &response);
                     let _ = app.emit("quota-updated", &response);
                 }
             }
