@@ -89,7 +89,7 @@ export function CursorPanel({ snapshot }: Props) {
 
           <div className="split-grid">
             <MetricRow
-              label="Auto"
+              label="First-Party Models"
               value={
                 snapshot.autoPercentUsed === null
                   ? "—"

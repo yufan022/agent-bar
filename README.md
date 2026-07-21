@@ -34,7 +34,7 @@ These endpoints are unofficial and may change without notice.
 ## Features (v0.1)
 
 - Menu bar title with compact Cursor remaining quota
-- Popover with plan usage, Auto/API/Total percentages, on-demand spend, billing cycle, refresh
+- Popover with plan usage, First-Party Models/API/Total percentages, on-demand spend, billing cycle, refresh
 - Background refresh every 5 minutes
 - Claude Code / Codex “Coming soon” cards
 - Cookie-based auth reserved in code (`AuthSource::Cookie`) but not implemented yet
