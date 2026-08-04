@@ -109,7 +109,6 @@ export function CursorPanel({ snapshot }: Props) {
           </div>
 
           <div className="split-grid">
-            <PercentMetric label="Total" value={snapshot.totalPercentUsed} />
             <PercentMetric
               label="First-Party Models"
               value={snapshot.autoPercentUsed}

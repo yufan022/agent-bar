@@ -23,7 +23,7 @@ The app appears in the menu bar (no Dock icon). Click the tray item to open the 
 ### Quota (tray)
 
 - Menu bar icon with Cursor remaining quota in the tooltip
-- Popover with plan usage, First-Party Models/API/Total percentages, on-demand spend, billing cycle, refresh
+- Popover with plan usage, First-Party Models/API percentages, on-demand spend, billing cycle, refresh
 - Background refresh every 5 minutes
 - Claude Code / Codex / Grok Build “Coming soon” cards
 - Launch at login (Settings)
