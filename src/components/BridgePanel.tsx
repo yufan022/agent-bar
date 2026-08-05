@@ -444,15 +444,19 @@ export function BridgePanel() {
   const [statusReport, setStatusReport] = useState<StatusReport | null>(null);
 
   const [syncFrom, setSyncFrom] = useState<BridgeToolId>("claude");
-  const [syncTo, setSyncTo] = useState<BridgeToolId[]>(["cursor"]);
+  const [syncTo, setSyncTo] = useState<BridgeToolId[]>([
+    "codex",
+    "opencode",
+    "cursor",
+  ]);
   const [syncKinds, setSyncKinds] = useState<string[]>([
     "instructions",
     "skills",
     "mcp",
   ]);
   const [dryRun, setDryRun] = useState(true);
-  const [prune, setPrune] = useState(false);
-  const [force, setForce] = useState(false);
+  const [prune, setPrune] = useState(true);
+  const [force, setForce] = useState(true);
   const [syncReport, setSyncReport] = useState<SyncReport | null>(null);
 
   const [diffFrom, setDiffFrom] = useState<BridgeToolId>("claude");
