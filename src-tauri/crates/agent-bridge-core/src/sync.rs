@@ -625,18 +625,18 @@ mod tests {
             "expected cursor instructions skip, got:\n{}",
             report.render()
         );
-        assert!(
-            report
-                .render()
-                .contains("skills: skipped (cursor skill sync is disabled)"),
-            "expected cursor skills skip, got:\n{}",
-            report.render()
-        );
 
         let cursor = ToolAdapter::in_home(ToolId::Cursor, home);
         assert!(cursor.read_instructions().ok().flatten().is_none());
         assert!(!home.join(".cursor/rules/agent-bridge.mdc").exists());
-        assert!(!home.join(".cursor/skills/demo").exists());
+        let cursor_skill = home.join(".cursor/skills/demo");
+        assert!(
+            cursor_skill
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false),
+            "cursor skills should be a symlink"
+        );
 
         let cursor_mcp = match cursor.read_mcp() {
             Ok(d) => d,

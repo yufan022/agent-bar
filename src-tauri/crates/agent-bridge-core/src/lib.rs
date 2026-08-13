@@ -3,8 +3,7 @@
 //!
 //! Instructions and skills are synced via symlinks to the source's canonical
 //! path. Cursor does not support file-based instruction sync (User Rules have
-//! no stable file API), and skill sync to Cursor is disabled; only MCP is
-//! synced for that tool.
+//! no stable file API), so only skills and MCP are synced for that tool.
 
 pub mod adapters;
 pub mod error;
