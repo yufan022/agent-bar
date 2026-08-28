@@ -678,6 +678,82 @@ mod tests {
     }
 
     #[test]
+    fn sync_claude_to_pi() {
+        let dir = match tempdir() {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let home = dir.path();
+        setup_claude_home(home);
+        let _ = fs::create_dir_all(home.join(".pi/agent"));
+        let _ = fs::write(
+            home.join(".pi/agent/mcp.json"),
+            "{\n  \"settings\": { \"toolPrefix\": \"mcp\" },\n  \"mcpServers\": {}\n}\n",
+        );
+
+        let report = match sync(&SyncOptions {
+            from: ToolId::Claude,
+            to: vec![ToolId::Pi],
+            kinds: SyncKinds::all(),
+            dry_run: false,
+            prune: false,
+            force: false,
+            home: Some(home.to_path_buf()),
+        }) {
+            Ok(r) => r,
+            Err(e) => panic!("{e}"),
+        };
+        assert!(report.success(), "{}", report.render());
+
+        let pi = ToolAdapter::in_home(ToolId::Pi, home);
+        let instr = home.join(".pi/agent/AGENTS.md");
+        assert!(
+            instr
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false),
+            "pi instructions should be a symlink"
+        );
+        let pi_instr = match pi.read_instructions() {
+            Ok(Some(s)) => s,
+            other => panic!("pi instructions: {other:?}"),
+        };
+        assert!(pi_instr.contains("Always test"));
+
+        let claude_real = match ToolAdapter::in_home(ToolId::Claude, home).instructions_real_path()
+        {
+            Ok(Some(p)) => p,
+            other => panic!("claude real path: {other:?}"),
+        };
+        let pi_real = match pi.instructions_real_path() {
+            Ok(Some(p)) => p,
+            other => panic!("pi real path: {other:?}"),
+        };
+        assert_eq!(claude_real, pi_real);
+
+        let pi_skill = home.join(".pi/agent/skills/demo");
+        assert!(
+            pi_skill
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false),
+            "pi skills should be a symlink"
+        );
+
+        let pi_mcp = match pi.read_mcp() {
+            Ok(d) => d,
+            Err(e) => panic!("{e}"),
+        };
+        assert!(pi_mcp.servers.contains_key("demo"));
+        let pi_mcp_raw = match fs::read_to_string(home.join(".pi/agent/mcp.json")) {
+            Ok(s) => s,
+            Err(e) => panic!("{e}"),
+        };
+        assert!(pi_mcp_raw.contains("\"settings\""));
+        assert!(pi_mcp_raw.contains("toolPrefix"));
+    }
+
+    #[test]
     fn sync_claude_sse_to_codex_converts_protocol() {
         let dir = match tempdir() {
             Ok(d) => d,

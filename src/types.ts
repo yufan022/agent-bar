@@ -97,13 +97,14 @@ export function formatTime(iso: string | null): string {
   });
 }
 
-export type BridgeToolId = "claude" | "codex" | "opencode" | "cursor";
+export type BridgeToolId = "claude" | "codex" | "opencode" | "cursor" | "pi";
 
 export const BRIDGE_TOOLS: { id: BridgeToolId; label: string }[] = [
   { id: "claude", label: "Claude" },
   { id: "codex", label: "Codex" },
   { id: "opencode", label: "OpenCode" },
   { id: "cursor", label: "Cursor" },
+  { id: "pi", label: "Pi" },
 ];
 
 export const BRIDGE_KINDS: { id: string; label: string }[] = [

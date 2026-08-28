@@ -68,7 +68,7 @@ impl McpDocument {
 /// Read MCP config for a tool from disk into IR.
 pub fn read_mcp(tool: ToolId, path: &Path) -> Result<McpDocument> {
     match tool {
-        ToolId::Claude | ToolId::Cursor => read_mcp_servers_json(path, tool),
+        ToolId::Claude | ToolId::Cursor | ToolId::Pi => read_mcp_servers_json(path, tool),
         ToolId::OpenCode => read_opencode_mcp(path),
         ToolId::Codex => read_codex_mcp(path),
     }
@@ -78,7 +78,7 @@ pub fn read_mcp(tool: ToolId, path: &Path) -> Result<McpDocument> {
 pub fn write_mcp(tool: ToolId, path: &Path, doc: &McpDocument, mode: WriteMode) -> Result<()> {
     let normalized = normalize_mcp_for_tool(tool, doc);
     match tool {
-        ToolId::Claude => write_claude_mcp(path, &normalized, mode),
+        ToolId::Claude | ToolId::Pi => write_claude_mcp(path, &normalized, mode),
         ToolId::Cursor => write_cursor_mcp(path, &normalized, mode),
         ToolId::OpenCode => write_opencode_mcp(path, &normalized, mode),
         ToolId::Codex => write_codex_mcp(path, &normalized, mode),
@@ -213,10 +213,13 @@ fn parse_json_server(
         let headers = extract_string_map(obj.get("headers")).unwrap_or_default();
         let headers = match tool {
             ToolId::Cursor => rewrite_map_values(headers, rewrite_env_cursor_to_claude),
-            ToolId::Claude => headers,
-            _ => headers,
+            ToolId::Claude | ToolId::Pi | ToolId::OpenCode | ToolId::Codex => headers,
         };
-        let protocol = parse_http_protocol(obj.get("type").and_then(|v| v.as_str()));
+        let protocol = parse_http_protocol(
+            obj.get("type")
+                .and_then(|v| v.as_str())
+                .or_else(|| obj.get("transport").and_then(|v| v.as_str())),
+        );
         return Ok(McpServer {
             name: name.to_string(),
             transport: McpTransport::Http {
@@ -240,7 +243,7 @@ fn parse_json_server(
     let env = extract_string_map(obj.get("env")).unwrap_or_default();
     let env = match tool {
         ToolId::Cursor => rewrite_map_values(env, rewrite_env_cursor_to_claude),
-        _ => env,
+        ToolId::Claude | ToolId::Pi | ToolId::OpenCode | ToolId::Codex => env,
     };
 
     Ok(McpServer {
@@ -1166,5 +1169,107 @@ mod tests {
             rewrite_sse_url_to_streamable_http("https://example.com/api/v1"),
             "https://example.com/api/v1"
         );
+    }
+
+    #[test]
+    fn pi_mcp_roundtrip_preserves_settings() {
+        let dir = match tempdir() {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let path = dir.path().join("mcp.json");
+        if atomic_write(
+            &path,
+            r#"{
+  "settings": { "toolPrefix": "mcp", "idleTimeout": 10 },
+  "mcpServers": {}
+}
+"#,
+        )
+        .is_err()
+        {
+            return;
+        }
+        let mut doc = McpDocument::default();
+        doc.servers.insert("demo".into(), stdio_server("demo"));
+        doc.servers.insert(
+            "remote".into(),
+            McpServer {
+                name: "remote".into(),
+                transport: McpTransport::Http {
+                    url: "https://mcp.example.com/mcp".into(),
+                    headers: BTreeMap::new(),
+                    protocol: HttpProtocol::StreamableHttp,
+                },
+            },
+        );
+        if write_mcp(ToolId::Pi, &path, &doc, WriteMode::Safe).is_err() {
+            return;
+        }
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(raw.contains("\"settings\""));
+        assert!(raw.contains("toolPrefix"));
+        assert!(raw.contains("${API_KEY}"));
+        let back = match read_mcp(ToolId::Pi, &path) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        assert!(back.servers.contains_key("demo"));
+        assert!(back.servers.contains_key("remote"));
+        match &back.servers["demo"].transport {
+            McpTransport::Stdio { env, .. } => {
+                assert_eq!(env.get("TOKEN").map(String::as_str), Some("Bearer ${API_KEY}"));
+            }
+            _ => panic!("expected stdio"),
+        }
+    }
+
+    #[test]
+    fn reads_pi_transport_field() {
+        let dir = match tempdir() {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let path = dir.path().join("mcp.json");
+        if atomic_write(
+            &path,
+            r#"{
+  "mcpServers": {
+    "supabase": {
+      "transport": "streamable-http",
+      "url": "https://mcp.supabase.com/mcp"
+    },
+    "asana": {
+      "transport": "sse",
+      "url": "https://mcp.asana.com/sse"
+    }
+  }
+}
+"#,
+        )
+        .is_err()
+        {
+            return;
+        }
+        let doc = match read_mcp(ToolId::Pi, &path) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        match &doc.servers["supabase"].transport {
+            McpTransport::Http { protocol, url, .. } => {
+                assert_eq!(*protocol, HttpProtocol::StreamableHttp);
+                assert_eq!(url, "https://mcp.supabase.com/mcp");
+            }
+            _ => panic!("expected http"),
+        }
+        match &doc.servers["asana"].transport {
+            McpTransport::Http { protocol, .. } => {
+                assert_eq!(*protocol, HttpProtocol::Sse);
+            }
+            _ => panic!("expected http"),
+        }
     }
 }
