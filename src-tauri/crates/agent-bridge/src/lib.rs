@@ -11,7 +11,7 @@ use clap::Subcommand;
 pub enum BridgeCommands {
     /// Sync resources from one tool to one or more targets
     Sync {
-        /// Source tool: claude, codex, opencode, cursor, pi
+        /// Source tool: claude, codex, opencode, cursor, pi, omp
         #[arg(long)]
         from: String,
 

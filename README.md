@@ -1,6 +1,6 @@
 # agent-bar
 
-Mac menu bar app that tracks code-agent usage quotas and syncs global agent configs (instructions, skills, MCP) across Claude Code, Codex, OpenCode, Cursor, and Pi.
+Mac menu bar app that tracks code-agent usage quotas and syncs global agent configs (instructions, skills, MCP) across Claude Code, Codex, OpenCode, Cursor, Pi, and OMP.
 
 ## Requirements
 
@@ -39,11 +39,13 @@ Sync **user-global** instructions, skills, and MCP between:
 | OpenCode | `~/.config/opencode/AGENTS.md` | `~/.config/opencode/skills/` | `~/.config/opencode/opencode.json` |
 | Cursor | *(not supported)* | `~/.cursor/skills/` | `~/.cursor/mcp.json` |
 | Pi | `~/.pi/agent/AGENTS.md` | `~/.pi/agent/skills/` | `~/.pi/agent/mcp.json` |
+| OMP | `~/.omp/agent/AGENTS.md` | `~/.omp/agent/skills/` | `~/.omp/agent/mcp.json` |
 
 - Instructions / skills: symlink to the source real path
 - MCP: convert via an internal IR and merge safely (other config keys preserved)
 - Cursor has no stable file-based User Rules API, so instructions are skipped; skills and MCP are still written
 - Pi MCP uses Claude-compatible `mcpServers` JSON (`${VAR}` env interpolation); other keys such as `settings` are preserved
+- OMP MCP uses the same Claude-compatible `mcpServers` JSON; other keys such as `$schema` and `disabledServers` are preserved
 
 In the popover, open **Bridge** (icon next to Settings) for Status / Sync / Diff. Click a tool on Status to open its inventory.
 
@@ -68,7 +70,7 @@ cargo build -p agent-bridge -p agent-bar-cli --release --manifest-path src-tauri
 ### `agent-bridge` (compatible)
 
 ```bash
-agent-bridge sync --from claude --to cursor,codex,opencode,pi
+agent-bridge sync --from claude --to cursor,codex,opencode,pi,omp
 agent-bridge sync --from claude --to cursor --dry-run
 agent-bridge sync --from cursor --to claude --only skills,mcp --force
 agent-bridge sync --from claude --to cursor --prune
@@ -80,7 +82,7 @@ agent-bridge details --tool claude
 ### `agent-bar bridge`
 
 ```bash
-agent-bar bridge sync --from claude --to cursor,codex,pi --dry-run
+agent-bar bridge sync --from claude --to cursor,codex,pi,omp --dry-run
 agent-bar bridge diff --from claude --to cursor
 agent-bar bridge status
 agent-bar bridge details --tool claude

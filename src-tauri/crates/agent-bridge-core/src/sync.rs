@@ -754,6 +754,83 @@ mod tests {
     }
 
     #[test]
+    fn sync_claude_to_omp() {
+        let dir = match tempdir() {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let home = dir.path();
+        setup_claude_home(home);
+        let _ = fs::create_dir_all(home.join(".omp/agent"));
+        let _ = fs::write(
+            home.join(".omp/agent/mcp.json"),
+            "{\n  \"$schema\": \"https://example.com/mcp-schema.json\",\n  \"disabledServers\": [\"skip-me\"],\n  \"mcpServers\": {}\n}\n",
+        );
+
+        let report = match sync(&SyncOptions {
+            from: ToolId::Claude,
+            to: vec![ToolId::Omp],
+            kinds: SyncKinds::all(),
+            dry_run: false,
+            prune: false,
+            force: false,
+            home: Some(home.to_path_buf()),
+        }) {
+            Ok(r) => r,
+            Err(e) => panic!("{e}"),
+        };
+        assert!(report.success(), "{}", report.render());
+
+        let omp = ToolAdapter::in_home(ToolId::Omp, home);
+        let instr = home.join(".omp/agent/AGENTS.md");
+        assert!(
+            instr
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false),
+            "omp instructions should be a symlink"
+        );
+        let omp_instr = match omp.read_instructions() {
+            Ok(Some(s)) => s,
+            other => panic!("omp instructions: {other:?}"),
+        };
+        assert!(omp_instr.contains("Always test"));
+
+        let claude_real = match ToolAdapter::in_home(ToolId::Claude, home).instructions_real_path()
+        {
+            Ok(Some(p)) => p,
+            other => panic!("claude real path: {other:?}"),
+        };
+        let omp_real = match omp.instructions_real_path() {
+            Ok(Some(p)) => p,
+            other => panic!("omp real path: {other:?}"),
+        };
+        assert_eq!(claude_real, omp_real);
+
+        let omp_skill = home.join(".omp/agent/skills/demo");
+        assert!(
+            omp_skill
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false),
+            "omp skills should be a symlink"
+        );
+
+        let omp_mcp = match omp.read_mcp() {
+            Ok(d) => d,
+            Err(e) => panic!("{e}"),
+        };
+        assert!(omp_mcp.servers.contains_key("demo"));
+        let omp_mcp_raw = match fs::read_to_string(home.join(".omp/agent/mcp.json")) {
+            Ok(s) => s,
+            Err(e) => panic!("{e}"),
+        };
+        assert!(omp_mcp_raw.contains("\"$schema\""));
+        assert!(omp_mcp_raw.contains("disabledServers"));
+        assert!(omp_mcp_raw.contains("skip-me"));
+    }
+
+    #[test]
     fn sync_claude_sse_to_codex_converts_protocol() {
         let dir = match tempdir() {
             Ok(d) => d,

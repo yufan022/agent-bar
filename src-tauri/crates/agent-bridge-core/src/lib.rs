@@ -1,5 +1,5 @@
 //! Core library for agent-bridge: sync instructions, skills, and MCP configs
-//! across Claude Code, Codex, OpenCode, Cursor, and Pi (user-global scope).
+//! across Claude Code, Codex, OpenCode, Cursor, Pi, and OMP (user-global scope).
 //!
 //! Instructions and skills are synced via symlinks to the source's canonical
 //! path. Cursor does not support file-based instruction sync (User Rules have

@@ -449,6 +449,7 @@ export function BridgePanel() {
     "opencode",
     "cursor",
     "pi",
+    "omp",
   ]);
   const [syncKinds, setSyncKinds] = useState<string[]>([
     "instructions",

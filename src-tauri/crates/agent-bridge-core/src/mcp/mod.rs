@@ -68,7 +68,9 @@ impl McpDocument {
 /// Read MCP config for a tool from disk into IR.
 pub fn read_mcp(tool: ToolId, path: &Path) -> Result<McpDocument> {
     match tool {
-        ToolId::Claude | ToolId::Cursor | ToolId::Pi => read_mcp_servers_json(path, tool),
+        ToolId::Claude | ToolId::Cursor | ToolId::Pi | ToolId::Omp => {
+            read_mcp_servers_json(path, tool)
+        }
         ToolId::OpenCode => read_opencode_mcp(path),
         ToolId::Codex => read_codex_mcp(path),
     }
@@ -78,7 +80,7 @@ pub fn read_mcp(tool: ToolId, path: &Path) -> Result<McpDocument> {
 pub fn write_mcp(tool: ToolId, path: &Path, doc: &McpDocument, mode: WriteMode) -> Result<()> {
     let normalized = normalize_mcp_for_tool(tool, doc);
     match tool {
-        ToolId::Claude | ToolId::Pi => write_claude_mcp(path, &normalized, mode),
+        ToolId::Claude | ToolId::Pi | ToolId::Omp => write_claude_mcp(path, &normalized, mode),
         ToolId::Cursor => write_cursor_mcp(path, &normalized, mode),
         ToolId::OpenCode => write_opencode_mcp(path, &normalized, mode),
         ToolId::Codex => write_codex_mcp(path, &normalized, mode),
@@ -213,7 +215,9 @@ fn parse_json_server(
         let headers = extract_string_map(obj.get("headers")).unwrap_or_default();
         let headers = match tool {
             ToolId::Cursor => rewrite_map_values(headers, rewrite_env_cursor_to_claude),
-            ToolId::Claude | ToolId::Pi | ToolId::OpenCode | ToolId::Codex => headers,
+            ToolId::Claude | ToolId::Pi | ToolId::Omp | ToolId::OpenCode | ToolId::Codex => {
+                headers
+            }
         };
         let protocol = parse_http_protocol(
             obj.get("type")
@@ -243,7 +247,7 @@ fn parse_json_server(
     let env = extract_string_map(obj.get("env")).unwrap_or_default();
     let env = match tool {
         ToolId::Cursor => rewrite_map_values(env, rewrite_env_cursor_to_claude),
-        ToolId::Claude | ToolId::Pi | ToolId::OpenCode | ToolId::Codex => env,
+        ToolId::Claude | ToolId::Pi | ToolId::Omp | ToolId::OpenCode | ToolId::Codex => env,
     };
 
     Ok(McpServer {
@@ -1270,6 +1274,64 @@ mod tests {
                 assert_eq!(*protocol, HttpProtocol::Sse);
             }
             _ => panic!("expected http"),
+        }
+    }
+
+    #[test]
+    fn omp_mcp_roundtrip_preserves_schema_and_disabled_servers() {
+        let dir = match tempdir() {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        let path = dir.path().join("mcp.json");
+        if atomic_write(
+            &path,
+            r#"{
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/config/mcp-schema.json",
+  "disabledServers": ["skip-me"],
+  "mcpServers": {}
+}
+"#,
+        )
+        .is_err()
+        {
+            return;
+        }
+        let mut doc = McpDocument::default();
+        doc.servers.insert("demo".into(), stdio_server("demo"));
+        doc.servers.insert(
+            "remote".into(),
+            McpServer {
+                name: "remote".into(),
+                transport: McpTransport::Http {
+                    url: "https://mcp.example.com/mcp".into(),
+                    headers: BTreeMap::new(),
+                    protocol: HttpProtocol::StreamableHttp,
+                },
+            },
+        );
+        if write_mcp(ToolId::Omp, &path, &doc, WriteMode::Safe).is_err() {
+            return;
+        }
+        let raw = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert!(raw.contains("\"$schema\""));
+        assert!(raw.contains("disabledServers"));
+        assert!(raw.contains("skip-me"));
+        assert!(raw.contains("${API_KEY}"));
+        let back = match read_mcp(ToolId::Omp, &path) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+        assert!(back.servers.contains_key("demo"));
+        assert!(back.servers.contains_key("remote"));
+        match &back.servers["demo"].transport {
+            McpTransport::Stdio { env, .. } => {
+                assert_eq!(env.get("TOKEN").map(String::as_str), Some("Bearer ${API_KEY}"));
+            }
+            _ => panic!("expected stdio"),
         }
     }
 }

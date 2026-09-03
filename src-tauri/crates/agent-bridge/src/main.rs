@@ -10,7 +10,7 @@ use clap::Parser;
 #[command(
     name = "agent-bridge",
     version,
-    about = "Sync instructions, skills, and MCP configs across Claude Code, Codex, OpenCode, Cursor, and Pi (user-global)"
+    about = "Sync instructions, skills, and MCP configs across Claude Code, Codex, OpenCode, Cursor, Pi, and OMP (user-global)"
 )]
 struct Cli {
     #[command(subcommand)]

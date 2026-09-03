@@ -13,15 +13,17 @@ pub enum ToolId {
     OpenCode,
     Cursor,
     Pi,
+    Omp,
 }
 
 impl ToolId {
-    pub const ALL: [ToolId; 5] = [
+    pub const ALL: [ToolId; 6] = [
         ToolId::Claude,
         ToolId::Codex,
         ToolId::OpenCode,
         ToolId::Cursor,
         ToolId::Pi,
+        ToolId::Omp,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -31,6 +33,7 @@ impl ToolId {
             ToolId::OpenCode => "opencode",
             ToolId::Cursor => "cursor",
             ToolId::Pi => "pi",
+            ToolId::Omp => "omp",
         }
     }
 }
@@ -51,6 +54,7 @@ impl FromStr for ToolId {
             "opencode" | "open-code" => Ok(ToolId::OpenCode),
             "cursor" => Ok(ToolId::Cursor),
             "pi" | "pi-coding-agent" | "pi-agent" => Ok(ToolId::Pi),
+            "omp" | "oh-my-pi" | "oh-omp" => Ok(ToolId::Omp),
             other => Err(Error::UnknownTool(other.to_string())),
         }
     }

@@ -64,6 +64,13 @@ impl ToolPaths {
                 mcp_config: home.join(".pi/agent/mcp.json"),
                 home,
             },
+            ToolId::Omp => Self {
+                tool,
+                instructions: Some(home.join(".omp/agent/AGENTS.md")),
+                skills_dir: home.join(".omp/agent/skills"),
+                mcp_config: home.join(".omp/agent/mcp.json"),
+                home,
+            },
         }
     }
 
@@ -163,5 +170,18 @@ mod tests {
         assert!(p.supports_skills_sync());
         assert_eq!(p.skills_dir, Path::new("/tmp/home/.pi/agent/skills"));
         assert_eq!(p.mcp_config, Path::new("/tmp/home/.pi/agent/mcp.json"));
+    }
+
+    #[test]
+    fn omp_paths() {
+        let p = ToolPaths::for_tool_in_home(ToolId::Omp, Path::new("/tmp/home"));
+        assert_eq!(
+            p.instructions.as_deref(),
+            Some(Path::new("/tmp/home/.omp/agent/AGENTS.md"))
+        );
+        assert!(p.supports_instructions());
+        assert!(p.supports_skills_sync());
+        assert_eq!(p.skills_dir, Path::new("/tmp/home/.omp/agent/skills"));
+        assert_eq!(p.mcp_config, Path::new("/tmp/home/.omp/agent/mcp.json"));
     }
 }

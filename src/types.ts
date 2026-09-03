@@ -97,7 +97,7 @@ export function formatTime(iso: string | null): string {
   });
 }
 
-export type BridgeToolId = "claude" | "codex" | "opencode" | "cursor" | "pi";
+export type BridgeToolId = "claude" | "codex" | "opencode" | "cursor" | "pi" | "omp";
 
 export const BRIDGE_TOOLS: { id: BridgeToolId; label: string }[] = [
   { id: "claude", label: "Claude" },
@@ -105,6 +105,7 @@ export const BRIDGE_TOOLS: { id: BridgeToolId; label: string }[] = [
   { id: "opencode", label: "OpenCode" },
   { id: "cursor", label: "Cursor" },
   { id: "pi", label: "Pi" },
+  { id: "omp", label: "OMP" },
 ];
 
 export const BRIDGE_KINDS: { id: string; label: string }[] = [

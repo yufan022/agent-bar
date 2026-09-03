@@ -23,7 +23,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Sync instructions, skills, and MCP across Claude / Codex / OpenCode / Cursor / Pi
+    /// Sync instructions, skills, and MCP across Claude / Codex / OpenCode / Cursor / Pi / OMP
     Bridge {
         #[command(subcommand)]
         command: BridgeCommands,
