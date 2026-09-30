@@ -70,7 +70,7 @@ fn format_tooltip(response: &AgentsQuotaResponse) -> String {
         .iter()
         .map(|a| match a.status {
             crate::model::AgentStatus::Ok => {
-                format!("{} · {}", a.provider_name, remaining_text(a))
+                format!("{} · {}", a.provider_name, a.tooltip_detail())
             }
             crate::model::AgentStatus::ComingSoon => {
                 format!("{} · coming soon", a.provider_name)
@@ -83,18 +83,6 @@ fn format_tooltip(response: &AgentsQuotaResponse) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-fn remaining_text(snapshot: &crate::model::QuotaSnapshot) -> String {
-    match (snapshot.remaining, &snapshot.unit) {
-        (Some(value), crate::model::QuotaUnit::Cents) => {
-            format!("${:.2} left", value / 100.0)
-        }
-        (Some(value), crate::model::QuotaUnit::Requests) => {
-            format!("{:.0} left", value)
-        }
-        (None, _) => "unknown".to_string(),
-    }
 }
 
 fn toggle_popover(app: &AppHandle) {
@@ -231,17 +219,15 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window("main") {
                 let window_for_event = window.clone();
-                window.on_window_event(move |event| {
-                    match event {
-                        WindowEvent::Focused(false) => {
-                            let _ = window_for_event.hide();
-                        }
-                        WindowEvent::CloseRequested { api, .. } => {
-                            api.prevent_close();
-                            let _ = window_for_event.hide();
-                        }
-                        _ => {}
+                window.on_window_event(move |event| match event {
+                    WindowEvent::Focused(false) => {
+                        let _ = window_for_event.hide();
                     }
+                    WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        let _ = window_for_event.hide();
+                    }
+                    _ => {}
                 });
             }
 

@@ -6,6 +6,25 @@ use serde::{Deserialize, Serialize};
 pub enum QuotaUnit {
     Cents,
     Requests,
+    /// Remaining capacity expressed as a percentage of a rate-limit window.
+    Percent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageWindow {
+    pub label: String,
+    pub short_label: String,
+    pub used_percent: f64,
+    pub resets_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreditBalance {
+    pub has_credits: bool,
+    pub unlimited: bool,
+    pub balance: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -47,6 +66,10 @@ pub struct QuotaSnapshot {
     pub billing_cycle_end: Option<DateTime<Utc>>,
     pub days_until_reset: Option<i64>,
     pub on_demand: Option<OnDemandUsage>,
+    pub windows: Vec<UsageWindow>,
+    pub extra_windows: Vec<UsageWindow>,
+    pub credits: Option<CreditBalance>,
+    pub earned_resets: Option<i64>,
     pub tray_label: String,
     pub error: Option<String>,
     pub fetched_at: DateTime<Utc>,
@@ -72,6 +95,10 @@ impl QuotaSnapshot {
             billing_cycle_end: None,
             days_until_reset: None,
             on_demand: None,
+            windows: Vec::new(),
+            extra_windows: Vec::new(),
+            credits: None,
+            earned_resets: None,
             tray_label: provider_name.to_string(),
             error: None,
             fetched_at: Utc::now(),
@@ -97,6 +124,10 @@ impl QuotaSnapshot {
             billing_cycle_end: None,
             days_until_reset: None,
             on_demand: None,
+            windows: Vec::new(),
+            extra_windows: Vec::new(),
+            credits: None,
+            earned_resets: None,
             tray_label: format!("{provider_name} ?"),
             error: Some(message),
             fetched_at: Utc::now(),
@@ -111,7 +142,30 @@ impl QuotaSnapshot {
             (Some(value), QuotaUnit::Requests) => {
                 format!("{prefix} {:.0}", value)
             }
+            (Some(value), QuotaUnit::Percent) => {
+                format!("{prefix} {value:.0}%")
+            }
             (None, _) => format!("{prefix} ?"),
+        }
+    }
+
+    pub fn tooltip_detail(&self) -> String {
+        if !self.windows.is_empty() {
+            let parts: Vec<String> = self
+                .windows
+                .iter()
+                .map(|window| {
+                    let left = (100.0 - window.used_percent).clamp(0.0, 100.0);
+                    format!("{} {left:.0}%", window.short_label)
+                })
+                .collect();
+            return format!("{} left", parts.join(" · "));
+        }
+        match (self.remaining, &self.unit) {
+            (Some(value), QuotaUnit::Cents) => format!("${:.2} left", value / 100.0),
+            (Some(value), QuotaUnit::Requests) => format!("{value:.0} left"),
+            (Some(value), QuotaUnit::Percent) => format!("{value:.0}% left"),
+            (None, _) => "unknown".to_string(),
         }
     }
 }

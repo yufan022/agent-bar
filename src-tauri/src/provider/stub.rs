@@ -15,13 +15,6 @@ impl StubProvider {
         }
     }
 
-    pub fn codex() -> Self {
-        Self {
-            id: "codex",
-            name: "Codex",
-        }
-    }
-
     pub fn grok_build() -> Self {
         Self {
             id: "grok-build",

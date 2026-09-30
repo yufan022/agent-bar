@@ -24,8 +24,9 @@ The app appears in the menu bar (no Dock icon). Click the tray item to open the 
 
 - Menu bar icon with Cursor remaining quota in the tooltip
 - Popover with plan usage, First-Party Models/API percentages, on-demand spend, billing cycle, refresh
+- Codex card with the 5-hour and weekly ChatGPT rate-limit windows
 - Background refresh every 5 minutes
-- Claude Code / Codex / Grok Build “Coming soon” cards
+- Claude Code / Grok Build “Coming soon” cards
 - Launch at login (Settings)
 
 ### Bridge (UI + CLI)
@@ -101,6 +102,14 @@ agent-bar bridge details --tool claude
 
 These endpoints are unofficial and may change without notice.
 
+## How Codex usage is loaded
+
+1. Read the ChatGPT session from `auth.json` (`$CODEX_HOME/auth.json`, otherwise `~/.codex/auth.json`). The file is read on each refresh and is not copied into agent-bar config.
+2. Call `GET https://chatgpt.com/backend-api/wham/usage` with that access token.
+3. Show the primary window (usually 5 hours) and the secondary window (usually 7 days) as percent used, plus credits when the balance is non-zero.
+
+API-key sign-in has no ChatGPT plan window. A 401 means the local session expired; open Codex and sign in again. This endpoint is unofficial and may change without notice. agent-bar does not refresh or rewrite Codex tokens.
+
 ## Build app
 
 ```bash
@@ -116,5 +125,6 @@ cargo test -p agent-bridge-core --manifest-path src-tauri/Cargo.toml
 ## Privacy
 
 - Access token is read from the local Cursor database on each refresh and sent only to `api2.cursor.sh` over HTTPS.
+- Codex access token is read from local `auth.json` on each refresh and sent only to `chatgpt.com` over HTTPS.
 - agent-bar does not write tokens to its own config files.
 - Bridge only reads/writes local agent config paths under your home directory.

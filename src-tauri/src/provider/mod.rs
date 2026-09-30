@@ -1,3 +1,4 @@
+pub mod codex;
 pub mod cursor;
 pub mod stub;
 
@@ -24,7 +25,7 @@ pub trait QuotaProvider: Send + Sync {
 pub async fn fetch_all_agents() -> Vec<QuotaSnapshot> {
     let cursor = cursor::CursorProvider::new();
     let claude = stub::StubProvider::claude_code();
-    let codex = stub::StubProvider::codex();
+    let codex = codex::CodexProvider::new();
     let grok = stub::StubProvider::grok_build();
 
     let cursor_result = match cursor.fetch().await {

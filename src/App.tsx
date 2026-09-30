@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AgentPlaceholder } from "./components/AgentPlaceholder";
 import { BridgePanel } from "./components/BridgePanel";
+import { CodexPanel } from "./components/CodexPanel";
 import { CursorPanel } from "./components/CursorPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import type { AgentsQuotaResponse, QuotaSnapshot } from "./types";
@@ -160,6 +161,7 @@ function App() {
   }, [loadCached, refresh]);
 
   const cursor = data ? findAgent(data.agents, "cursor") : undefined;
+  const codex = data ? findAgent(data.agents, "codex") : undefined;
 
   return (
     <div className="shell">
@@ -250,7 +252,13 @@ function App() {
             ) : null}
 
             {agentTab === "codex" ? (
-              <AgentPlaceholder name="Codex" />
+              <>
+                {loading && !data ? (
+                  <p className="muted">Fetching Codex usage…</p>
+                ) : null}
+                {error && !codex ? <p className="error-text">{error}</p> : null}
+                {codex ? <CodexPanel snapshot={codex} /> : null}
+              </>
             ) : null}
 
             {agentTab === "grok-build" ? (

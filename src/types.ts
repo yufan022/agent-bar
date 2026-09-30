@@ -1,4 +1,17 @@
-export type QuotaUnit = "cents" | "requests";
+export type QuotaUnit = "cents" | "requests" | "percent";
+
+export interface UsageWindow {
+  label: string;
+  shortLabel: string;
+  usedPercent: number;
+  resetsAt: string | null;
+}
+
+export interface CreditBalance {
+  hasCredits: boolean;
+  unlimited: boolean;
+  balance: string | null;
+}
 
 export type AgentStatus = "ok" | "error" | "unsupported" | "comingSoon";
 
@@ -28,6 +41,10 @@ export interface QuotaSnapshot {
   billingCycleEnd: string | null;
   daysUntilReset: number | null;
   onDemand: OnDemandUsage | null;
+  windows: UsageWindow[];
+  extraWindows: UsageWindow[];
+  credits: CreditBalance | null;
+  earnedResets: number | null;
   trayLabel: string;
   error: string | null;
   fetchedAt: string;
@@ -45,6 +62,9 @@ export function formatAmount(value: number | null, unit: QuotaUnit): string {
   if (unit === "cents") {
     return `$${(value / 100).toFixed(2)}`;
   }
+  if (unit === "percent") {
+    return `${Math.round(value)}%`;
+  }
   return Math.round(value).toLocaleString();
 }
 
@@ -54,6 +74,9 @@ export function formatRemaining(value: number | null, unit: QuotaUnit): string {
   }
   if (unit === "cents") {
     return `$${(value / 100).toFixed(2)} left`;
+  }
+  if (unit === "percent") {
+    return `${Math.round(value)}% left`;
   }
   return `${Math.round(value).toLocaleString()} left`;
 }

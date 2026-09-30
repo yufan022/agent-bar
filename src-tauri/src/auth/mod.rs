@@ -1,3 +1,4 @@
+pub mod codex_token;
 pub mod cursor_token;
 
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,22 @@ pub enum AuthError {
     Database(String),
     #[error("Cookie authentication is not implemented yet")]
     CookieUnsupported,
+    #[error("Codex is not signed in. Run `codex login`, then try again.")]
+    CodexAuthNotFound,
+    #[error("Codex access token not found. Run `codex login`, then try again.")]
+    CodexTokenNotFound,
+    #[error(
+        "Codex is signed in with an API key. Plan quota is available after signing in with ChatGPT."
+    )]
+    CodexApiKeyAuth,
+    #[error("Failed to read Codex auth file: {0}")]
+    CodexAuth(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct CodexCredentials {
+    pub access_token: String,
+    pub account_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,4 +52,8 @@ pub fn resolve_cursor_credentials(source: AuthSource) -> Result<CursorCredential
         AuthSource::LocalToken => cursor_token::read_local_credentials(),
         AuthSource::Cookie => Err(AuthError::CookieUnsupported),
     }
+}
+
+pub fn resolve_codex_credentials() -> Result<CodexCredentials, AuthError> {
+    codex_token::read_local_credentials()
 }

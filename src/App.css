@@ -235,6 +235,10 @@ body {
   padding: 0;
 }
 
+.window-reset {
+  margin: 0;
+}
+
 .metric-row strong {
   color: #f0f3f7;
   font-weight: 600;

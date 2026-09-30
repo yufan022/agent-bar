@@ -1,7 +1,5 @@
 use crate::auth::{resolve_cursor_credentials, AuthSource};
-use crate::model::{
-    AgentStatus, OnDemandUsage, QuotaSnapshot, QuotaUnit,
-};
+use crate::model::{AgentStatus, OnDemandUsage, QuotaSnapshot, QuotaUnit};
 use crate::provider::{QuotaError, QuotaProvider};
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
@@ -156,10 +154,7 @@ impl CursorProvider {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::new());
+            let body = response.text().await.unwrap_or_else(|_| String::new());
             return Err(QuotaError::Http(format!(
                 "GetCurrentPeriodUsage failed ({status}): {body}"
             )));
@@ -183,10 +178,7 @@ impl CursorProvider {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::new());
+            let body = response.text().await.unwrap_or_else(|_| String::new());
             return Err(QuotaError::Http(format!(
                 "/auth/usage failed ({status}): {body}"
             )));
@@ -210,10 +202,7 @@ impl CursorProvider {
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::new());
+            let body = response.text().await.unwrap_or_else(|_| String::new());
             return Err(QuotaError::Http(format!(
                 "/api/usage/summary failed ({status}): {body}"
             )));
@@ -254,6 +243,10 @@ fn merge_cursor_usage(
         billing_cycle_end: None,
         days_until_reset: None,
         on_demand: None,
+        windows: Vec::new(),
+        extra_windows: Vec::new(),
+        credits: None,
+        earned_resets: None,
         tray_label: format!("{name} ?"),
         error: None,
         fetched_at: now,
@@ -274,13 +267,12 @@ fn merge_cursor_usage(
             if plan.limit.unwrap_or(0.0) > 0.0 || plan.remaining.is_some() {
                 has_plan_usage = true;
                 snapshot.unit = QuotaUnit::Cents;
-                let used = plan
-                    .included_spend
-                    .or(plan.total_spend)
-                    .or_else(|| match (plan.limit, plan.remaining) {
+                let used = plan.included_spend.or(plan.total_spend).or_else(|| {
+                    match (plan.limit, plan.remaining) {
                         (Some(limit), Some(remaining)) => Some((limit - remaining).max(0.0)),
                         _ => None,
-                    });
+                    }
+                });
                 snapshot.used = used;
                 snapshot.limit = plan.limit;
                 snapshot.remaining = plan.remaining.or_else(|| match (plan.limit, used) {
@@ -294,11 +286,12 @@ fn merge_cursor_usage(
         }
 
         if let Some(spend) = period.spend_limit_usage {
-            let used = spend.individual_used.or(spend.pooled_used).or(spend.total_spend);
+            let used = spend
+                .individual_used
+                .or(spend.pooled_used)
+                .or(spend.total_spend);
             let limit = spend.individual_limit.or(spend.pooled_limit);
-            let remaining = spend
-                .individual_remaining
-                .or(spend.pooled_remaining);
+            let remaining = spend.individual_remaining.or(spend.pooled_remaining);
             if used.is_some() || limit.is_some() {
                 snapshot.on_demand = Some(OnDemandUsage {
                     enabled: true,
@@ -439,10 +432,7 @@ fn extract_request_bucket(usage: &Value) -> Option<(f64, Option<f64>)> {
             }
             if let Ok(parsed) = serde_json::from_value::<ModelBucket>(value.clone()) {
                 if parsed.num_requests.is_some() || parsed.max_request_usage.is_some() {
-                    return Some((
-                        parsed.num_requests.unwrap_or(0.0),
-                        parsed.max_request_usage,
-                    ));
+                    return Some((parsed.num_requests.unwrap_or(0.0), parsed.max_request_usage));
                 }
             }
         }
