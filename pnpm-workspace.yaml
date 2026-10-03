@@ -1,0 +1,4 @@
+# Dependency lifecycle scripts are skipped unless listed here.
+allowBuilds:
+  esbuild: true
+  fsevents: true

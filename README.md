@@ -6,14 +6,15 @@ Mac menu bar app that tracks code-agent usage quotas and syncs global agent conf
 
 - macOS 12+
 - [Rust](https://rustup.rs/) (stable)
-- Node.js 20+
+- Node.js 22+
+- [pnpm](https://pnpm.io/) 12 (version pinned in `package.json`)
 - Cursor installed and signed in (quota view reads the local session token)
 
 ## Develop
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
 
 The app appears in the menu bar (no Dock icon). Click the tray item to open the popover.
@@ -113,7 +114,7 @@ API-key sign-in has no ChatGPT plan window. A 401 means the local session expire
 ## Build app
 
 ```bash
-npm run tauri build
+pnpm tauri build
 ```
 
 ## Tests
