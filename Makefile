@@ -14,14 +14,14 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
 
-install: ## Install npm dependencies
-	npm install
+install: ## Install frontend dependencies
+	pnpm install
 
 dev: ## Run Tauri app in development mode
-	npm run tauri dev
+	pnpm tauri dev
 
 build: ## Build and bundle the Tauri app (release)
-	npm run tauri build
+	pnpm tauri build
 
 test: ## Run agent-bridge-core unit tests
 	cargo test $(CORE_PACKAGE) --manifest-path $(CARGO_MANIFEST)
@@ -34,7 +34,7 @@ install-cli: ## Install agent-bridge and agent-bar into Cargo bin
 	cargo install --path src-tauri/crates/agent-bar-cli --force
 
 check: ## Typecheck / compile without producing a release bundle
-	npm run build
+	pnpm build
 	cargo check --manifest-path $(CARGO_MANIFEST) --workspace
 
 clean: ## Remove frontend dist and Rust target directories
