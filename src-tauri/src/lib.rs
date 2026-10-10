@@ -7,7 +7,7 @@ mod provider;
 use crate::error::AppError;
 use crate::model::AgentsQuotaResponse;
 use crate::provider::fetch_all_agents;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{
     image::Image,
@@ -20,6 +20,18 @@ use tokio::sync::RwLock;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(300);
 const TRAY_ID: &str = "main_tray";
+
+/// Last tray-icon bounds, in physical pixels. A click on the icon blurs the
+/// popover before mouse-up; hiding on that blur makes the click reopen the
+/// window instead of closing it.
+static TRAY_BOUNDS: Mutex<Option<TrayBounds>> = Mutex::new(None);
+
+struct TrayBounds {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -83,6 +95,43 @@ fn format_tooltip(response: &AgentsQuotaResponse) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn remember_tray_bounds(event: &TrayIconEvent) {
+    let rect = match event {
+        TrayIconEvent::Click { rect, .. }
+        | TrayIconEvent::Enter { rect, .. }
+        | TrayIconEvent::Leave { rect, .. }
+        | TrayIconEvent::Move { rect, .. } => rect,
+        _ => return,
+    };
+    // tray-icon already reports physical pixels; the scale factor is unused.
+    let position = rect.position.to_physical::<f64>(1.0);
+    let size = rect.size.to_physical::<f64>(1.0);
+    if let Ok(mut slot) = TRAY_BOUNDS.lock() {
+        *slot = Some(TrayBounds {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+        });
+    }
+}
+
+fn pointer_on_tray(app: &AppHandle) -> bool {
+    let Ok(cursor) = app.cursor_position() else {
+        return false;
+    };
+    let Ok(slot) = TRAY_BOUNDS.lock() else {
+        return false;
+    };
+    let Some(bounds) = slot.as_ref() else {
+        return false;
+    };
+    cursor.x >= bounds.x
+        && cursor.x < bounds.x + bounds.width
+        && cursor.y >= bounds.y
+        && cursor.y < bounds.y + bounds.height
 }
 
 fn toggle_popover(app: &AppHandle) {
@@ -151,6 +200,7 @@ fn build_tray(app: &AppHandle) -> Result<TrayIcon, Box<dyn std::error::Error>> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
+            remember_tray_bounds(&event);
             tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
@@ -221,6 +271,9 @@ pub fn run() {
                 let window_for_event = window.clone();
                 window.on_window_event(move |event| match event {
                     WindowEvent::Focused(false) => {
+                        if pointer_on_tray(window_for_event.app_handle()) {
+                            return;
+                        }
                         let _ = window_for_event.hide();
                     }
                     WindowEvent::CloseRequested { api, .. } => {
