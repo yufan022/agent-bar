@@ -110,13 +110,22 @@ function createWindow(): BrowserWindow {
   return popup;
 }
 
-function createTray(): Tray {
+function loadMenuBarIcon(): Electron.NativeImage {
   const iconPath = path.join(app.getAppPath(), "assets/icons/32x32.png");
-  const image = fs.existsSync(iconPath)
-    ? nativeImage.createFromPath(iconPath)
-    : nativeImage.createEmpty();
+  if (!fs.existsSync(iconPath)) {
+    return nativeImage.createEmpty();
+  }
+  // The file is a 32px bitmap. Treat it as @2x so the menu bar draws a 16pt
+  // status icon instead of a 32pt one that fills the bar.
+  const image = nativeImage.createFromBuffer(fs.readFileSync(iconPath), {
+    scaleFactor: 2,
+  });
   image.setTemplateImage(true);
-  const icon = new Tray(image);
+  return image;
+}
+
+function createTray(): Tray {
+  const icon = new Tray(loadMenuBarIcon());
   icon.setToolTip("agent-bar");
   const menu = Menu.buildFromTemplate([
     {
