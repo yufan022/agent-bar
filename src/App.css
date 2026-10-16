@@ -60,10 +60,28 @@ body {
 .content {
   flex: 1;
   overflow: auto;
-  padding: 12px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  overscroll-behavior: contain;
+}
+
+.agent-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.agent-span {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 700px) {
+  .agent-board {
+    grid-template-columns: 1fr;
+  }
 }
 
 .agent-tabs {
@@ -104,6 +122,7 @@ body {
 }
 
 .card {
+  min-width: 0;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
@@ -307,6 +326,17 @@ body {
 .refresh-btn:hover:not(:disabled),
 .icon-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.refresh-btn:focus-visible,
+.icon-btn:focus-visible,
+.agent-tab:focus-visible,
+.toggle:focus-visible,
+.bridge-back-btn:focus-visible,
+.bridge-detail-toggle:focus-visible,
+.bridge-result-card-btn:focus-visible {
+  outline: 2px solid #8ec7ff;
+  outline-offset: 2px;
 }
 
 .refresh-btn:disabled,

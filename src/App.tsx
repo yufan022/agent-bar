@@ -9,20 +9,26 @@ import type { AgentsQuotaResponse, QuotaSnapshot } from "./types";
 import { formatTime } from "./types";
 
 type View = "home" | "settings" | "bridge";
-type AgentTab = "cursor" | "claude-code" | "codex" | "grok-build";
 
-const AGENT_TABS: { id: AgentTab; label: string }[] = [
-  { id: "cursor", label: "Cursor" },
-  { id: "claude-code", label: "Claude Code" },
-  { id: "codex", label: "Codex" },
-  { id: "grok-build", label: "Grok Build" },
-];
+function boardAgents(agents: QuotaSnapshot[]): QuotaSnapshot[] {
+  return [...agents].sort((a, b) => {
+    const rank = (status: QuotaSnapshot["status"]) =>
+      status === "comingSoon" ? 1 : 0;
+    return rank(a.status) - rank(b.status);
+  });
+}
 
-function findAgent(
-  agents: QuotaSnapshot[],
-  id: string,
-): QuotaSnapshot | undefined {
-  return agents.find((agent) => agent.providerId === id);
+function AgentSection({ snapshot }: { snapshot: QuotaSnapshot }) {
+  if (snapshot.status === "comingSoon") {
+    return <AgentPlaceholder name={snapshot.providerName} />;
+  }
+  if (snapshot.providerId === "cursor") {
+    return <CursorPanel snapshot={snapshot} />;
+  }
+  if (snapshot.providerId === "codex") {
+    return <CodexPanel snapshot={snapshot} />;
+  }
+  return <AgentPlaceholder name={snapshot.providerName} />;
 }
 
 function SettingsIcon() {
@@ -96,7 +102,6 @@ function subtitleForView(
 
 function App() {
   const [view, setView] = useState<View>("home");
-  const [agentTab, setAgentTab] = useState<AgentTab>("cursor");
   const [data, setData] = useState<AgentsQuotaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,9 +156,6 @@ function App() {
     };
   }, [loadCached, refresh]);
 
-  const cursor = data ? findAgent(data.agents, "cursor") : undefined;
-  const codex = data ? findAgent(data.agents, "codex") : undefined;
-
   return (
     <div className="shell">
       <header className="top-bar">
@@ -207,55 +209,27 @@ function App() {
         {view === "settings" ? <SettingsPanel /> : null}
         {view === "bridge" ? <BridgePanel /> : null}
         {view === "home" ? (
-          <>
-            <nav className="agent-tabs" aria-label="Agents">
-              {AGENT_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={
-                    agentTab === tab.id
-                      ? "agent-tab agent-tab-active"
-                      : "agent-tab"
-                  }
-                  aria-selected={agentTab === tab.id}
-                  onClick={() => setAgentTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
-
-            {agentTab === "cursor" ? (
-              <>
-                {loading && !data ? (
-                  <p className="muted">Fetching Cursor usage…</p>
-                ) : null}
-                {error && !cursor ? (
-                  <p className="error-text">{error}</p>
-                ) : null}
-                {cursor ? <CursorPanel snapshot={cursor} /> : null}
-              </>
+          <div className="agent-board" aria-busy={loading && !data}>
+            {loading && !data ? (
+              <p className="muted agent-span">Fetching usage…</p>
             ) : null}
-
-            {agentTab === "claude-code" ? (
-              <AgentPlaceholder name="Claude Code" />
+            {error ? (
+              <p className="error-text agent-span" role="alert">
+                {error}
+              </p>
             ) : null}
-
-            {agentTab === "codex" ? (
-              <>
-                {loading && !data ? (
-                  <p className="muted">Fetching Codex usage…</p>
-                ) : null}
-                {error && !codex ? <p className="error-text">{error}</p> : null}
-                {codex ? <CodexPanel snapshot={codex} /> : null}
-              </>
+            {data
+              ? boardAgents(data.agents).map((snapshot) => (
+                  <AgentSection
+                    key={snapshot.providerId}
+                    snapshot={snapshot}
+                  />
+                ))
+              : null}
+            {data && data.agents.length === 0 ? (
+              <p className="muted agent-span">No agent usage yet.</p>
             ) : null}
-
-            {agentTab === "grok-build" ? (
-              <AgentPlaceholder name="Grok Build" />
-            ) : null}
-          </>
+          </div>
         ) : null}
       </main>
     </div>

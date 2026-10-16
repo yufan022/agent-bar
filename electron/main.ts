@@ -10,6 +10,8 @@ import { formatTooltip, type AgentsQuotaResponse } from "../lib/quota/model.ts";
 
 const POLL_MS = 300_000;
 const DEV_URL = process.env.ELECTRON_RENDERER_URL ?? "http://127.0.0.1:1420";
+const POPOVER_WIDTH = 920;
+const POPOVER_HEIGHT = 740;
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let tray: Tray | null = null;
@@ -58,10 +60,19 @@ async function start(): Promise<void> {
   starter.unref?.();
 }
 
+function popoverSize(display: Electron.Display): { width: number; height: number } {
+  const margin = 16;
+  return {
+    width: Math.min(POPOVER_WIDTH, display.workArea.width - margin),
+    height: Math.min(POPOVER_HEIGHT, display.workArea.height - margin),
+  };
+}
+
 function createWindow(): BrowserWindow {
+  const initial = popoverSize(screen.getPrimaryDisplay());
   const popup = new BrowserWindow({
-    width: 400,
-    height: 620,
+    width: initial.width,
+    height: initial.height,
     show: false,
     frame: false,
     transparent: true,
@@ -239,17 +250,20 @@ function showPopover(): void {
     return;
   }
   const bounds = tray.getBounds();
-  const [width, height] = window.getSize();
+  const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+  const { width, height } = popoverSize(display);
+  const [currentWidth, currentHeight] = window.getSize();
+  if (currentWidth !== width || currentHeight !== height) {
+    window.setSize(width, height, false);
+  }
   let x = Math.round(bounds.x + bounds.width / 2 - width / 2);
   let y = Math.round(bounds.y + bounds.height + 6);
-  const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
   if (bounds.y > display.workArea.y + display.workArea.height / 2) {
     y = Math.round(bounds.y - height - 6);
   }
-  x = Math.min(
-    Math.max(x, display.workArea.x),
-    display.workArea.x + display.workArea.width - width,
-  );
+  const area = display.workArea;
+  x = Math.min(Math.max(x, area.x), area.x + area.width - width);
+  y = Math.min(Math.max(y, area.y), area.y + area.height - height);
   window.setPosition(x, y, false);
   window.show();
   window.focus();
