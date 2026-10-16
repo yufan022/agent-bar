@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { bridgeDetails, bridgeDiff, bridgeStatus, bridgeSync } from "../api";
 import type {
   BridgeSyncRequest,
-  BridgeSyncResponse,
   BridgeToolId,
   DetailsReport,
   DiffChange,
@@ -483,7 +482,7 @@ export function BridgePanel() {
   const loadStatus = useCallback(() => {
     void run(async () => {
       const tool = statusTool || null;
-      const report = await invoke<StatusReport>("bridge_status", { tool });
+      const report = await bridgeStatus(tool);
       setStatusReport(report);
     });
   }, [run, statusTool]);
@@ -498,7 +497,7 @@ export function BridgePanel() {
       setDetailsTool(tool);
       setDetailsReport(null);
       void run(async () => {
-        const report = await invoke<DetailsReport>("bridge_details", { tool });
+        const report = await bridgeDetails(tool);
         setDetailsReport(report);
       });
     },
@@ -549,7 +548,7 @@ export function BridgePanel() {
         prune,
         force,
       };
-      const res = await invoke<BridgeSyncResponse>("bridge_sync", { req });
+      const res = await bridgeSync(req);
       if (!res.ok) {
         setError("Sync completed with errors");
       }
@@ -742,10 +741,7 @@ export function BridgePanel() {
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                const report = await invoke<DiffReport>("bridge_diff", {
-                  from: diffFrom,
-                  to: diffTo,
-                });
+                const report = await bridgeDiff(diffFrom, diffTo);
                 setDiffReport(report);
               })
             }

@@ -2,11 +2,12 @@
 
 Mac menu bar app that tracks code-agent usage quotas and syncs global agent configs (instructions, skills, MCP) across Claude Code, Codex, OpenCode, Cursor, Pi, and OMP.
 
+The desktop shell is Electron. Quota fetching, config sync, and both CLIs are TypeScript running on Node.js.
+
 ## Requirements
 
 - macOS 12+
-- [Rust](https://rustup.rs/) (stable)
-- Node.js 22+
+- Node.js 22.12+
 - [pnpm](https://pnpm.io/) 12 (version pinned in `package.json`)
 - Cursor installed and signed in (quota view reads the local session token)
 
@@ -14,7 +15,7 @@ Mac menu bar app that tracks code-agent usage quotas and syncs global agent conf
 
 ```bash
 pnpm install
-pnpm tauri dev
+pnpm dev
 ```
 
 The app appears in the menu bar (no Dock icon). Click the tray item to open the popover.
@@ -28,7 +29,7 @@ The app appears in the menu bar (no Dock icon). Click the tray item to open the 
 - Codex card with the 5-hour and weekly ChatGPT rate-limit windows
 - Background refresh every 5 minutes
 - Claude Code / Grok Build “Coming soon” cards
-- Launch at login (Settings)
+- Launch at login (Settings). The packaged app registers a macOS login item. An unpackaged dev build registers the Electron executable.
 
 ### Bridge (UI + CLI)
 
@@ -48,28 +49,21 @@ Sync **user-global** instructions, skills, and MCP between:
 - Cursor has no stable file-based User Rules API, so instructions are skipped; skills and MCP are still written
 - Pi MCP uses Claude-compatible `mcpServers` JSON (`${VAR}` env interpolation); other keys such as `settings` are preserved
 - OMP MCP uses the same Claude-compatible `mcpServers` JSON; other keys such as `$schema` and `disabledServers` are preserved
+- Codex `config.toml` keeps keys and comments outside the replaced MCP server tables
 
 In the popover, open **Bridge** (icon next to Settings) for Status / Sync / Diff. Click a tool on Status to open its inventory.
 
 ## CLI
 
-Two binaries share the same core:
+Build once, then run either binary:
 
 ```bash
-# Compatible drop-in (same surface as the original agent-bridge project)
-cargo install --path src-tauri/crates/agent-bridge
-
-# agent-bar entry with a `bridge` subcommand group
-cargo install --path src-tauri/crates/agent-bar-cli
+pnpm build
+pnpm exec agent-bridge status
+pnpm exec agent-bar bridge status
 ```
 
-Or build both:
-
-```bash
-cargo build -p agent-bridge -p agent-bar-cli --release --manifest-path src-tauri/Cargo.toml
-```
-
-### `agent-bridge` (compatible)
+### `agent-bridge`
 
 ```bash
 agent-bridge sync --from claude --to cursor,codex,opencode,pi,omp
@@ -92,8 +86,8 @@ agent-bar bridge details --tool claude
 
 ## How Cursor usage is loaded
 
-1. Read `cursorAuth/accessToken` from  
-   `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`  
+1. Read `cursorAuth/accessToken` from
+   `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
    (read-only; token is not cached to disk by agent-bar).
 2. Call undocumented Cursor HTTPS endpoints on `https://api2.cursor.sh`:
    - `POST /aiserver.v1.DashboardService/GetCurrentPeriodUsage`
@@ -114,13 +108,15 @@ API-key sign-in has no ChatGPT plan window. A 401 means the local session expire
 ## Build app
 
 ```bash
-pnpm tauri build
+pnpm dist
 ```
+
+This produces a macOS disk image under `release/`.
 
 ## Tests
 
 ```bash
-cargo test -p agent-bridge-core --manifest-path src-tauri/Cargo.toml
+pnpm test
 ```
 
 ## Privacy

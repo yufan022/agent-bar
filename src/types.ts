@@ -1,59 +1,33 @@
-export type QuotaUnit = "cents" | "requests" | "percent";
+export type {
+  AgentStatus,
+  AgentsQuotaResponse,
+  CreditBalance,
+  OnDemandUsage,
+  QuotaSnapshot,
+  QuotaUnit,
+  UsageWindow,
+} from "../lib/quota/model.ts";
+export type {
+  DetailsInstructions,
+  DetailsReport,
+  DiffChange,
+  DiffReport,
+  InstructionsDiff,
+  InstructionsStatus,
+  NamedDiff,
+  PathPresence,
+  SkillInfo,
+  StatusReport,
+  SyncCategory,
+  SyncLine,
+  SyncLineStatus,
+  SyncReport,
+  SyncTargetReport,
+  ToolStatus,
+} from "../lib/bridge/report.ts";
+export type { BridgeSyncRequest, BridgeSyncResponse } from "../lib/ipc-types.ts";
 
-export interface UsageWindow {
-  label: string;
-  shortLabel: string;
-  usedPercent: number;
-  resetsAt: string | null;
-}
-
-export interface CreditBalance {
-  hasCredits: boolean;
-  unlimited: boolean;
-  balance: string | null;
-}
-
-export type AgentStatus = "ok" | "error" | "unsupported" | "comingSoon";
-
-export interface OnDemandUsage {
-  enabled: boolean;
-  used: number | null;
-  limit: number | null;
-  remaining: number | null;
-  unit: QuotaUnit;
-}
-
-export interface QuotaSnapshot {
-  providerId: string;
-  providerName: string;
-  status: AgentStatus;
-  email: string | null;
-  membershipType: string | null;
-  displayMessage: string | null;
-  used: number | null;
-  limit: number | null;
-  remaining: number | null;
-  unit: QuotaUnit;
-  autoPercentUsed: number | null;
-  apiPercentUsed: number | null;
-  totalPercentUsed: number | null;
-  billingCycleStart: string | null;
-  billingCycleEnd: string | null;
-  daysUntilReset: number | null;
-  onDemand: OnDemandUsage | null;
-  windows: UsageWindow[];
-  extraWindows: UsageWindow[];
-  credits: CreditBalance | null;
-  earnedResets: number | null;
-  trayLabel: string;
-  error: string | null;
-  fetchedAt: string;
-}
-
-export interface AgentsQuotaResponse {
-  agents: QuotaSnapshot[];
-  refreshedAt: string;
-}
+import type { QuotaSnapshot, QuotaUnit } from "../lib/quota/model.ts";
 
 export function formatAmount(value: number | null, unit: QuotaUnit): string {
   if (value === null || Number.isNaN(value)) {
@@ -138,113 +112,5 @@ export const BRIDGE_KINDS: { id: string; label: string }[] = [
 ];
 
 export function bridgeToolLabel(id: string): string {
-  return BRIDGE_TOOLS.find((t) => t.id === id)?.label ?? id;
-}
-
-export interface BridgeSyncRequest {
-  from: string;
-  to: string[];
-  only: string[];
-  dryRun: boolean;
-  prune: boolean;
-  force: boolean;
-}
-
-export interface PathPresence {
-  path: string;
-  exists: boolean;
-}
-
-export type InstructionsStatus =
-  | { state: "unsupported" }
-  | { state: "missing"; path: string }
-  | { state: "present"; path: string; realPath?: string; chars: number };
-
-export interface ToolStatus {
-  tool: string;
-  instructions: InstructionsStatus;
-  skillsDir: PathPresence;
-  mcpConfig: PathPresence;
-  skillCount: number;
-  mcpServerCount: number;
-}
-
-export interface StatusReport {
-  tools: ToolStatus[];
-}
-
-export interface SkillInfo {
-  name: string;
-  path: string;
-}
-
-export type DetailsInstructions =
-  | { state: "unsupported"; path: string }
-  | { state: "missing"; path: string }
-  | { state: "present"; path: string; chars: number };
-
-export interface DetailsReport {
-  tool: string;
-  skills: SkillInfo[];
-  mcpServers: string[];
-  instructions: DetailsInstructions;
-}
-
-export type DiffChange = "added" | "removed" | "same" | "changed";
-
-export interface NamedDiff {
-  name: string;
-  change: DiffChange;
-}
-
-export type InstructionsDiff =
-  | { state: "skipped"; reason: string }
-  | {
-      state: "compared";
-      identical: boolean;
-      fromPath?: string;
-      toPath?: string;
-      fromReal?: string;
-      toReal?: string;
-      summary: string;
-    };
-
-export interface DiffReport {
-  from: string;
-  to: string;
-  instructions: InstructionsDiff;
-  skills: NamedDiff[];
-  mcp: NamedDiff[];
-}
-
-export type SyncLineStatus = "info" | "ok" | "skip" | "plan" | "done" | "error";
-export type SyncCategory = "meta" | "instructions" | "skills" | "mcp";
-
-export interface SyncLine {
-  category: SyncCategory;
-  status: SyncLineStatus;
-  message: string;
-  name?: string;
-  path?: string;
-  linkTo?: string;
-  detail?: string[];
-}
-
-export interface SyncTargetReport {
-  tool: string;
-  items: SyncLine[];
-}
-
-export interface SyncReport {
-  sourceTool: string;
-  sourceHome: string;
-  dryRun: boolean;
-  notes: SyncLine[];
-  targets: SyncTargetReport[];
-  errors: string[];
-}
-
-export interface BridgeSyncResponse {
-  ok: boolean;
-  report: SyncReport;
+  return BRIDGE_TOOLS.find((tool) => tool.id === id)?.label ?? id;
 }

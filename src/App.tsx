@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { getAgentsQuota, onOpenSettings, onQuotaUpdated, refreshQuota } from "./api";
 import { AgentPlaceholder } from "./components/AgentPlaceholder";
 import { BridgePanel } from "./components/BridgePanel";
 import { CodexPanel } from "./components/CodexPanel";
@@ -105,7 +104,7 @@ function App() {
 
   const loadCached = useCallback(async () => {
     try {
-      const response = await invoke<AgentsQuotaResponse>("get_agents_quota");
+      const response = await getAgentsQuota();
       setData(response);
       setError(null);
     } catch (err) {
@@ -118,7 +117,7 @@ function App() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const response = await invoke<AgentsQuotaResponse>("refresh_quota");
+      const response = await refreshQuota();
       setData(response);
       setError(null);
     } catch (err) {
@@ -133,21 +132,13 @@ function App() {
     void loadCached();
     void refresh();
 
-    let unlistenQuota: (() => void) | undefined;
-    let unlistenSettings: (() => void) | undefined;
-
-    void listen<AgentsQuotaResponse>("quota-updated", (event) => {
-      setData(event.payload);
+    const unlistenQuota = onQuotaUpdated((payload) => {
+      setData(payload);
       setError(null);
       setLoading(false);
-    }).then((fn) => {
-      unlistenQuota = fn;
     });
-
-    void listen("open-settings", () => {
+    const unlistenSettings = onOpenSettings(() => {
       setView("settings");
-    }).then((fn) => {
-      unlistenSettings = fn;
     });
 
     return () => {

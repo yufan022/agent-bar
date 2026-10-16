@@ -5,27 +5,62 @@
   "type": "module",
   "packageManager": "pnpm@12.4.2",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
+  },
+  "main": "dist-electron/main.js",
+  "bin": {
+    "agent-bridge": "./dist-electron/cli/agent-bridge.js",
+    "agent-bar": "./dist-electron/cli/agent-bar.js"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "dev": "concurrently -k -n vite,node,app \"vite\" \"node scripts/build-node.mjs --watch\" \"wait-on http://127.0.0.1:1420 dist-electron/main.js && nodemon --watch dist-electron/main.js --watch dist-electron/preload.cjs --exec electron .\"",
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit && node scripts/build-node.mjs && vite build",
+    "start": "electron .",
+    "dist": "pnpm build && electron-builder",
+    "test": "node --test lib/bridge/bridge.test.ts lib/quota/quota.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.12.2",
-    "@tauri-apps/plugin-autostart": "^2.7.0",
-    "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "smol-toml": "^1.9.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.12.1",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^10.0.6",
+    "electron": "44.8.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "nodemon": "^3.1.14",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.yufan.agent-bar",
+    "productName": "agent-bar",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/renderer/**/*",
+      "dist-electron/**/*",
+      "assets/icons/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg"],
+      "icon": "assets/icons/icon.icns",
+      "minimumSystemVersion": "12.0",
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    },
+    "asar": true
   }
 }

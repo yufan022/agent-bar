@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { autostartDisable, autostartEnable, autostartIsEnabled } from "../api";
 
 export function SettingsPanel() {
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
@@ -10,7 +10,7 @@ export function SettingsPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const enabled = await isEnabled();
+      const enabled = await autostartIsEnabled();
       setLaunchAtLogin(enabled);
       setError(null);
     } catch (err) {
@@ -33,9 +33,9 @@ export function SettingsPanel() {
     setSaving(true);
     try {
       if (next) {
-        await enable();
+        await autostartEnable();
       } else {
-        await disable();
+        await autostartDisable();
       }
       setLaunchAtLogin(next);
       setError(null);

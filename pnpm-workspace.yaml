@@ -1,4 +1,8 @@
 # Dependency lifecycle scripts are skipped unless listed here.
 allowBuilds:
   esbuild: true
+  electron: true
+  electron-winstaller: true
   fsevents: true
+minimumReleaseAgeExclude:
+  - electron@44.8.0
