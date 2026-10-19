@@ -135,48 +135,50 @@ function MonitorBody({
 }) {
   return (
     <>
-      <section className="card monitor-scope" aria-label="Processor and memory">
-        <HostLine host={snapshot.host} />
-        <Trace
-          title="Processor"
-          value={snapshot.cpu?.percent ?? null}
-          series={history.map((sample) => sample.cpu)}
-          stroke="monitor-spark-cpu"
-          detail={snapshot.host?.cpu ?? ""}
-          extra={snapshot.host ? formatCores(snapshot.host) : ""}
-        >
-          {snapshot.cpu && snapshot.cpu.cores.length > 0 ? <CoreStrip cpu={snapshot.cpu} /> : null}
-        </Trace>
-        <Trace
-          title="Memory"
-          value={snapshot.memory?.percent ?? null}
-          series={history.map((sample) => sample.memory)}
-          stroke="monitor-spark-memory"
-          detail={memoryDetail(snapshot.memory)}
-          extra={cacheDetail(snapshot.memory)}
-        >
-          {snapshot.memory && snapshot.memory.swapTotalBytes > 0 ? (
-            <div className="monitor-swap">
-              <div className="metric-row">
-                <span>Swap</span>
-                <strong>
-                  {formatBytesPair(snapshot.memory.swapUsedBytes, snapshot.memory.swapTotalBytes)}
-                </strong>
+      <HostLine host={snapshot.host} />
+      <div className="monitor-pair">
+        <section className="card">
+          <Trace
+            title="Processor"
+            value={snapshot.cpu?.percent ?? null}
+            series={history.map((sample) => sample.cpu)}
+            stroke="monitor-spark-cpu"
+            detail={snapshot.host?.cpu ?? ""}
+            extra={snapshot.host ? formatCores(snapshot.host) : ""}
+          >
+            {snapshot.cpu && snapshot.cpu.cores.length > 0 ? <CoreStrip cpu={snapshot.cpu} /> : null}
+          </Trace>
+        </section>
+        <section className="card">
+          <Trace
+            title="Memory"
+            value={snapshot.memory?.percent ?? null}
+            series={history.map((sample) => sample.memory)}
+            stroke="monitor-spark-memory"
+            detail={memoryDetail(snapshot.memory)}
+            extra={cacheDetail(snapshot.memory)}
+          >
+            {snapshot.memory && snapshot.memory.swapTotalBytes > 0 ? (
+              <div className="monitor-swap">
+                <div className="metric-row">
+                  <span>Swap</span>
+                  <strong>
+                    {formatBytesPair(snapshot.memory.swapUsedBytes, snapshot.memory.swapTotalBytes)}
+                  </strong>
+                </div>
+                <Meter label="Swap" value={snapshot.memory.swapPercent} />
               </div>
-              <Meter label="Swap" value={snapshot.memory.swapPercent} />
-            </div>
-          ) : null}
-        </Trace>
-      </section>
+            ) : null}
+          </Trace>
+        </section>
+      </div>
 
-      <TemperatureCard temperature={snapshot.temperature} fans={snapshot.fans} />
+      <div className="monitor-pair">
+        <TemperatureCard temperature={snapshot.temperature} fans={snapshot.fans} />
+        <GraphicsCard gpus={snapshot.gpus} />
+      </div>
 
-      <section className="card" aria-labelledby="monitor-apps">
-        <h2 id="monitor-apps">Applications</h2>
-        <AppMemory apps={snapshot.processes?.apps ?? null} />
-      </section>
-
-      <div className="monitor-grid">
+      <div className="monitor-pair">
         <section className="card" aria-labelledby="monitor-load">
           <h2 id="monitor-load">Load</h2>
           <dl className="monitor-load">
@@ -195,23 +197,29 @@ function MonitorBody({
           </dl>
         </section>
         {snapshot.battery ? <BatteryCard battery={snapshot.battery} /> : null}
-        <GraphicsCard gpus={snapshot.gpus} />
       </div>
 
-      <section className="card" aria-labelledby="monitor-disks">
-        <h2 id="monitor-disks">Disks</h2>
-        <DiskList disks={snapshot.disks} activity={snapshot.diskActivity} />
-      </section>
+      <div className="monitor-pair">
+        <section className="card" aria-labelledby="monitor-disks">
+          <h2 id="monitor-disks">Disks</h2>
+          <DiskList disks={snapshot.disks} activity={snapshot.diskActivity} />
+        </section>
+        <section className="card" aria-labelledby="monitor-network">
+          <h2 id="monitor-network">Network</h2>
+          <NetworkList ifaces={snapshot.network} />
+        </section>
+      </div>
 
-      <section className="card" aria-labelledby="monitor-network">
-        <h2 id="monitor-network">Network</h2>
-        <NetworkList ifaces={snapshot.network} />
-      </section>
-
-      <section className="card" aria-labelledby="monitor-processes">
-        <h2 id="monitor-processes">Processes</h2>
-        <ProcessList processes={snapshot.processes} />
-      </section>
+      <div className="monitor-pair">
+        <section className="card" aria-labelledby="monitor-apps">
+          <h2 id="monitor-apps">Applications</h2>
+          <AppMemory apps={snapshot.processes?.apps ?? null} />
+        </section>
+        <section className="card" aria-labelledby="monitor-processes">
+          <h2 id="monitor-processes">Processes</h2>
+          <ProcessList processes={snapshot.processes} />
+        </section>
+      </div>
 
       {snapshot.warnings.length > 0 ? (
         <p className="monitor-warning">{snapshot.warnings.join(" ")}</p>
@@ -447,11 +455,13 @@ function NetworkList({ ifaces }: { ifaces: NetworkIface[] }) {
     return <p className="muted">No active interface reported.</p>;
   }
   return (
-    <ul className="monitor-list">
+    <ul className="monitor-list monitor-stack">
       {ifaces.map((iface) => (
         <li key={iface.name}>
-          <span translate="no">{iface.name}</span>
-          {iface.state === "unknown" ? null : <span className="muted">{ifaceLabel(iface.state)}</span>}
+          <div className="monitor-split">
+            <span translate="no">{iface.name}</span>
+            {iface.state === "unknown" ? null : <span className="muted">{ifaceLabel(iface.state)}</span>}
+          </div>
           <span className="monitor-rates">
             <span>In {formatRate(iface.rxBytesPerSec)}</span>
             <span>Out {formatRate(iface.txBytesPerSec)}</span>
