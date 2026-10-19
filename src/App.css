@@ -1092,6 +1092,10 @@ body {
   white-space: nowrap;
 }
 
+.monitor-fans {
+  margin-top: 10px;
+}
+
 .monitor-rates {
   display: flex;
   gap: 12px;

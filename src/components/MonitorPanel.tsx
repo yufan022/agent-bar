@@ -11,6 +11,7 @@ import {
   formatPercent,
   formatPrecisePercent,
   formatRate,
+  formatRpm,
   formatSampleTime,
   formatTemperature,
   formatUptime,
@@ -21,6 +22,7 @@ import {
   type BatteryReading,
   type CpuReading,
   type DiskVolume,
+  type FanReading,
   type GpuInfo,
   type HostInfo,
   type MemoryReading,
@@ -165,6 +167,8 @@ function MonitorBody({
         </Trace>
       </section>
 
+      <TemperatureCard temperature={snapshot.temperature} fans={snapshot.fans} />
+
       <section className="card" aria-labelledby="monitor-apps">
         <h2 id="monitor-apps">Applications</h2>
         <AppMemory apps={snapshot.processes?.apps ?? null} />
@@ -189,7 +193,6 @@ function MonitorBody({
           </dl>
         </section>
         {snapshot.battery ? <BatteryCard battery={snapshot.battery} /> : null}
-        <TemperatureCard temperature={snapshot.temperature} />
         <GraphicsCard gpus={snapshot.gpus} />
       </div>
 
@@ -304,19 +307,54 @@ function BatteryCard({ battery }: { battery: BatteryReading }) {
   );
 }
 
-function TemperatureCard({ temperature }: { temperature: TemperatureReading | null }) {
-  const primary = temperature?.mainC ?? temperature?.maxC ?? temperature?.chipsetC ?? null;
-  const chipset = temperature?.chipsetC ?? null;
+function TemperatureCard({
+  temperature,
+  fans,
+}: {
+  temperature: TemperatureReading | null;
+  fans: FanReading[];
+}) {
+  const cpu = temperature?.mainC ?? temperature?.maxC ?? null;
+  const soc = temperature?.chipsetC ?? null;
+  const gpu = temperature?.gpuC ?? null;
+  const rows = [
+    cpu !== null ? { label: "CPU", value: formatTemperature(cpu) } : null,
+    soc !== null ? { label: "SoC", value: formatTemperature(soc) } : null,
+    gpu !== null ? { label: "GPU", value: formatTemperature(gpu) } : null,
+  ].filter((row): row is { label: string; value: string } => row !== null);
   return (
     <section className="card" aria-labelledby="monitor-temperature">
       <h2 id="monitor-temperature">Temperature</h2>
-      {primary === null ? (
+      {rows.length === 0 && fans.length === 0 ? (
         <p className="muted">Temperature isn’t available in this session.</p>
       ) : (
         <>
-          <p className="monitor-figure">{formatTemperature(primary)}</p>
-          {chipset !== null && chipset !== primary ? (
-            <p className="muted">Chipset {formatTemperature(chipset)}</p>
+          {rows.length > 0 ? (
+            <ul className="monitor-list">
+              {rows.map((row) => (
+                <li key={row.label}>
+                  <div className="monitor-split">
+                    <span>{row.label}</span>
+                    <span className="monitor-bytes">{row.value}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">Temperature isn’t available in this session.</p>
+          )}
+          {fans.length > 0 ? (
+            <ul className={rows.length > 0 ? "monitor-list monitor-fans" : "monitor-list"} aria-label="Fans">
+              {fans.map((fan, index) => (
+                <li key={`${fan.label}-${index}`}>
+                  <div className="monitor-split">
+                    <span translate="no">{fan.label}</span>
+                    <span className="monitor-bytes">{formatRpm(fan.rpm)}</span>
+                  </div>
+                  {fan.percent !== null ? <Meter label={`${fan.label} speed`} value={fan.percent} /> : null}
+                </li>
+              ))}
+            </ul>
           ) : null}
         </>
       )}
@@ -554,9 +592,6 @@ function gpuDetail(gpu: GpuInfo): string {
   }
   if (gpu.vramBytes) {
     parts.push(gpu.shared ? `${formatBytes(gpu.vramBytes)} shared` : formatBytes(gpu.vramBytes));
-  }
-  if (gpu.temperatureC !== null) {
-    parts.push(formatTemperature(gpu.temperatureC));
   }
   if (gpu.utilization !== null) {
     parts.push(formatPercent(gpu.utilization));

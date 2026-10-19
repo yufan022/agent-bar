@@ -4,5 +4,6 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   fsevents: true
+  macos-temperature-sensor: true
 minimumReleaseAgeExclude:
   - electron@44.8.0

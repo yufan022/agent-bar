@@ -1,7 +1,6 @@
 import {
   battery,
   cpu,
-  cpuTemperature,
   currentLoad,
   fsSize,
   graphics,
@@ -11,9 +10,16 @@ import {
   osInfo,
   processes,
 } from "systeminformation";
+import { createRequire } from "node:module";
 import os from "node:os";
 import { MonitorCollector, type MonitorSource } from "./collector.ts";
-import { selectIfaceNames, type MonitorSnapshot } from "./model.ts";
+import { selectIfaceNames, type FanRaw, type MonitorSnapshot, type TemperatureRaw } from "./model.ts";
+import type {
+  FanReading as AppleFan,
+  TemperatureReading as AppleTemperature,
+} from "macos-temperature-sensor";
+
+const require = createRequire(import.meta.url);
 
 const NIC_TTL_MS = 30_000;
 
@@ -91,14 +97,12 @@ const systemInformationSource: MonitorSource = {
     };
   },
   async temperature() {
-    // Optional native readers (macos-temperature-sensor, osx-temperature-sensor)
-    // are not bundled. Apple silicon otherwise returns an empty reading.
-    const info = await cpuTemperature();
-    return {
-      mainC: finiteOrNull(info.main),
-      maxC: finiteOrNull(info.max),
-      chipsetC: finiteOrNull(info.chipset),
-    };
+    const sample = await appleSensors();
+    return sample.temperature;
+  },
+  async fans() {
+    const sample = await appleSensors();
+    return sample.fans;
   },
   async graphics() {
     const info = await graphics();
@@ -155,6 +159,62 @@ async function ifaceNames(): Promise<string[]> {
       return nicCache.names;
     }
     throw error;
+  }
+}
+
+interface AppleSensors {
+  temperature(): AppleTemperature;
+  fans(): AppleFan[];
+}
+
+interface SensorSnapshot {
+  temperature: TemperatureRaw;
+  fans: FanRaw[];
+}
+
+let pendingSensors: Promise<SensorSnapshot> | null = null;
+
+function appleSensors(): Promise<SensorSnapshot> {
+  if (pendingSensors) {
+    return pendingSensors;
+  }
+  const run = Promise.resolve().then(readAppleSensors);
+  pendingSensors = run;
+  void run.finally(() => {
+    if (pendingSensors === run) {
+      pendingSensors = null;
+    }
+  });
+  return run;
+}
+
+function readAppleSensors(): SensorSnapshot {
+  const empty: SensorSnapshot = {
+    temperature: { mainC: null, maxC: null, chipsetC: null, gpuC: null },
+    fans: [],
+  };
+  if (process.platform !== "darwin") {
+    return empty;
+  }
+  try {
+    const sensors = require("macos-temperature-sensor") as AppleSensors;
+    const reading = sensors.temperature();
+    return {
+      temperature: {
+        mainC: finiteOrNull(reading.cpu),
+        maxC: finiteOrNull(reading.cpu),
+        chipsetC: finiteOrNull(reading.soc),
+        gpuC: finiteOrNull(reading.gpu),
+      },
+      fans: sensors.fans().map((fan) => ({
+        label: fan.label,
+        rpm: fan.rpm,
+        minRpm: fan.min,
+        maxRpm: fan.max,
+      })),
+    };
+  } catch {
+    return empty;
   }
 }
 

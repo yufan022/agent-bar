@@ -75,6 +75,15 @@ export interface TemperatureReading {
   mainC: number | null;
   maxC: number | null;
   chipsetC: number | null;
+  gpuC: number | null;
+}
+
+export interface FanReading {
+  label: string;
+  rpm: number;
+  minRpm: number | null;
+  maxRpm: number | null;
+  percent: number | null;
 }
 
 export interface GpuInfo {
@@ -117,6 +126,7 @@ export interface MonitorSnapshot {
   network: NetworkIface[];
   battery: BatteryReading | null;
   temperature: TemperatureReading | null;
+  fans: FanReading[];
   gpus: GpuInfo[];
   processes: ProcessReading | null;
   warnings: string[];
@@ -178,6 +188,14 @@ export interface TemperatureRaw {
   mainC: number | null;
   maxC: number | null;
   chipsetC: number | null;
+  gpuC?: number | null;
+}
+
+export interface FanRaw {
+  label: string;
+  rpm: number;
+  minRpm: number | null;
+  maxRpm: number | null;
 }
 
 export interface GpuRaw {
@@ -222,6 +240,7 @@ export interface MonitorProbe {
   network: readonly NetworkRaw[];
   battery: BatteryRaw | null;
   temperature: TemperatureRaw | null;
+  fans: readonly FanRaw[];
   gpus: readonly GpuRaw[];
   processes: ProcessRaw | null;
   warnings: readonly string[];
@@ -277,6 +296,7 @@ export function normalizeMonitor(probe: MonitorProbe): MonitorSnapshot {
     network: normalizeNetwork(probe.network),
     battery: normalizeBattery(probe.battery),
     temperature: normalizeTemperature(probe.temperature),
+    fans: normalizeFans(probe.fans),
     gpus: normalizeGpus(probe.gpus),
     processes: normalizeProcesses(probe.processes, probe.memory?.totalBytes ?? 0),
     warnings: cleanWarnings(probe.warnings),
@@ -395,6 +415,13 @@ export function formatTemperature(celsius: number | null): string {
     Math.round(celsius),
   );
   return `${formatted}\u00a0°C`;
+}
+
+export function formatRpm(rpm: number | null): string {
+  if (rpm === null || !Number.isFinite(rpm) || rpm < 0) {
+    return "—";
+  }
+  return `${formatCount(rpm)}\u00a0rpm`;
 }
 
 export function formatBatteryTime(minutes: number | null): string {
@@ -565,11 +592,62 @@ function normalizeTemperature(raw: TemperatureRaw | null): TemperatureReading | 
     mainC: celsius(raw.mainC),
     maxC: celsius(raw.maxC),
     chipsetC: celsius(raw.chipsetC),
+    gpuC: celsius(raw.gpuC ?? null),
   };
-  if (reading.mainC === null && reading.maxC === null && reading.chipsetC === null) {
+  if (
+    reading.mainC === null &&
+    reading.maxC === null &&
+    reading.chipsetC === null &&
+    reading.gpuC === null
+  ) {
     return null;
   }
   return reading;
+}
+
+function normalizeFans(fans: readonly FanRaw[]): FanReading[] {
+  const result: FanReading[] = [];
+  for (const fan of fans) {
+    if (!Number.isFinite(fan.rpm) || fan.rpm < 0) {
+      continue;
+    }
+    const minRpm = nonNegativeOrNull(fan.minRpm);
+    const maxRpm = nonNegativeOrNull(fan.maxRpm);
+    const boundedMax = minRpm !== null && maxRpm !== null && maxRpm < minRpm ? null : maxRpm;
+    result.push({
+      label: fanLabel(fan.label, result.length),
+      rpm: fan.rpm,
+      minRpm,
+      maxRpm: boundedMax,
+      percent: fanPercent(fan.rpm, minRpm, boundedMax),
+    });
+    if (result.length >= 6) {
+      break;
+    }
+  }
+  return result;
+}
+
+function fanLabel(raw: string, index: number): string {
+  const cleaned = raw
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned ? clip(cleaned, 32) : `Fan ${index + 1}`;
+}
+
+function fanPercent(rpm: number, minRpm: number | null, maxRpm: number | null): number | null {
+  if (minRpm === null || maxRpm === null || maxRpm <= minRpm) {
+    return null;
+  }
+  return clampPercent(((rpm - minRpm) / (maxRpm - minRpm)) * 100);
+}
+
+function nonNegativeOrNull(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return value;
 }
 
 function normalizeGpus(gpus: readonly GpuRaw[]): GpuInfo[] {

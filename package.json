@@ -16,18 +16,21 @@
     "dev": "concurrently -k -n vite,node,app \"vite\" \"node scripts/build-node.mjs --watch\" \"wait-on http://127.0.0.1:1420 dist-electron/main.js && nodemon --watch dist-electron/main.js --watch dist-electron/preload.cjs --exec electron .\"",
     "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit && node scripts/build-node.mjs && vite build",
     "start": "electron .",
-    "dist": "pnpm build && electron-builder",
+    "dist": "pnpm build && node scripts/rebuild-sensor.mjs && electron-builder",
+    "postinstall": "node scripts/rebuild-sensor.mjs",
     "test": "node --test lib/bridge/bridge.test.ts lib/quota/quota.test.ts lib/monitor/monitor.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
+    "macos-temperature-sensor": "2.1.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "smol-toml": "^1.9.1",
     "systeminformation": "^5.33.15"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
     "@types/node": "^26.6.5",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
@@ -52,11 +55,17 @@
       "dist-electron/**/*",
       "assets/icons/**/*",
       "package.json",
-      "node_modules/systeminformation/**/*"
+      "node_modules/systeminformation/**/*",
+      "node_modules/macos-temperature-sensor/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/macos-temperature-sensor/**/*"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "assets/icons/icon.icns",
       "minimumSystemVersion": "12.0",
       "extendInfo": {

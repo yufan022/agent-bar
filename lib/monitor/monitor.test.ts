@@ -3,7 +3,9 @@ import test from "node:test";
 import { MonitorCollector, type MonitorSource } from "./collector.ts";
 import {
   formatBytes,
+  formatCount,
   formatRate,
+  formatRpm,
   formatUptime,
   normalizeMonitor,
   batteryTone,
@@ -27,6 +29,7 @@ function probe(partial: Partial<MonitorProbe>): MonitorProbe {
     network: [],
     battery: null,
     temperature: null,
+    fans: [],
     gpus: [],
     processes: null,
     warnings: [],
@@ -68,7 +71,8 @@ function source(overrides: Partial<MonitorSource> = {}): MonitorSource {
       acConnected: true,
       timeRemainingMin: null,
     }),
-    temperature: async () => ({ mainC: null, maxC: null, chipsetC: null }),
+    temperature: async () => ({ mainC: null, maxC: null, chipsetC: null, gpuC: null }),
+    fans: async () => [],
     graphics: async () => [],
     processes: async () => ({ all: 0, running: 0, list: [] }),
     ...overrides,
@@ -273,6 +277,30 @@ test("byte and uptime formatting stay unit-stable", () => {
   assert.equal(formatBytes(-1), "—");
   assert.equal(formatRate(null), "Measuring…");
   assert.equal(formatUptime(90_061), "1d 1h");
+  assert.equal(formatRpm(1523.6), `${formatCount(1523.6)}\u00a0rpm`);
+  assert.equal(formatRpm(-1), "—");
+});
+
+test("temperature and fans keep live sensor readings", () => {
+  const snapshot = normalizeMonitor(
+    probe({
+      temperature: { mainC: 50.7, maxC: 50.7, chipsetC: 49.4, gpuC: 53.2 },
+      fans: [
+        { label: "Fan 1", rpm: 2319, minRpm: 2317, maxRpm: 7826 },
+        { label: " \n ", rpm: 10, minRpm: null, maxRpm: null },
+        { label: "Fan 2", rpm: -1, minRpm: 0, maxRpm: 100 },
+      ],
+    }),
+  );
+  assert.equal(snapshot.temperature?.mainC, 50.7);
+  assert.equal(snapshot.temperature?.chipsetC, 49.4);
+  assert.equal(snapshot.temperature?.gpuC, 53.2);
+  assert.equal(snapshot.fans.length, 2);
+  assert.equal(snapshot.fans[0]?.label, "Fan 1");
+  assert.equal(snapshot.fans[0]?.percent, ((2319 - 2317) / (7826 - 2317)) * 100);
+  assert.equal(snapshot.fans[1]?.label, "Fan 2");
+  assert.equal(snapshot.fans[1]?.percent, null);
+  assert.equal(snapshot.fans[1]?.rpm, 10);
 });
 
 test("trace history drops the oldest sample at the limit", () => {

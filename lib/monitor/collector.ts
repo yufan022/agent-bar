@@ -7,6 +7,7 @@ import {
   type HostRaw,
   type MemoryRaw,
   type MonitorSnapshot,
+  type FanRaw,
   type NetworkRaw,
   type ProcessRaw,
   type TemperatureRaw,
@@ -22,6 +23,7 @@ export interface MonitorSource {
   network(): Promise<NetworkRaw[]>;
   battery(): Promise<BatteryRaw>;
   temperature(): Promise<TemperatureRaw>;
+  fans(): Promise<FanRaw[]>;
   graphics(): Promise<GpuRaw[]>;
   processes(): Promise<ProcessRaw>;
 }
@@ -74,7 +76,7 @@ export class MonitorCollector {
       warnings.push(probeWarning("Load", error));
     }
 
-    const [host, cpu, memory, disks, network, battery, temperature, gpus, processes] =
+    const [host, cpu, memory, disks, network, battery, temperature, fans, gpus, processes] =
       await Promise.all([
         this.cached(this.hostCache, now, () => this.source.host(), "System", null, warnings),
         this.live(() => this.source.currentLoad(), "Processor", null, warnings),
@@ -83,6 +85,7 @@ export class MonitorCollector {
         this.live(() => this.source.network(), "Network", [], warnings),
         this.live(() => this.source.battery(), "Battery", null, warnings),
         this.live(() => this.source.temperature(), "Temperature", null, warnings),
+        this.live(() => this.source.fans(), "Fans", [], warnings),
         this.cached(this.gpuCache, now, () => this.source.graphics(), "Graphics", [], warnings),
         this.cached(this.processCache, now, () => this.source.processes(), "Processes", null, warnings),
       ]);
@@ -98,6 +101,7 @@ export class MonitorCollector {
       network,
       battery,
       temperature,
+      fans,
       gpus,
       processes,
       warnings,
