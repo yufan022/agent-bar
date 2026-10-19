@@ -1,7 +1,10 @@
 import {
+  deriveDiskActivity,
   normalizeMonitor,
   type BatteryRaw,
   type CpuRaw,
+  type DiskActivity,
+  type DiskIoRaw,
   type DiskRaw,
   type GpuRaw,
   type HostRaw,
@@ -20,6 +23,7 @@ export interface MonitorSource {
   currentLoad(): Promise<CpuRaw>;
   memory(): Promise<MemoryRaw>;
   disks(): Promise<DiskRaw[]>;
+  diskIo(): Promise<DiskIoRaw[]>;
   network(): Promise<NetworkRaw[]>;
   battery(): Promise<BatteryRaw>;
   temperature(): Promise<TemperatureRaw>;
@@ -42,6 +46,8 @@ export class MonitorCollector {
   private readonly diskCache = new TtlCache<DiskRaw[]>(DISK_TTL_MS);
   private readonly gpuCache = new TtlCache<GpuRaw[]>(GRAPHICS_TTL_MS);
   private readonly processCache = new TtlCache<ProcessRaw>(PROCESS_TTL_MS);
+  private diskIoBaseline: { at: number; samples: DiskIoRaw[] } | null = null;
+  private diskActivity: DiskActivity[] = [];
   private inflight: Promise<MonitorSnapshot> | null = null;
 
   constructor(source: MonitorSource, now: () => number = Date.now, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -76,12 +82,13 @@ export class MonitorCollector {
       warnings.push(probeWarning("Load", error));
     }
 
-    const [host, cpu, memory, disks, network, battery, temperature, fans, gpus, processes] =
+    const [host, cpu, memory, disks, diskIo, network, battery, temperature, fans, gpus, processes] =
       await Promise.all([
         this.cached(this.hostCache, now, () => this.source.host(), "System", null, warnings),
         this.live(() => this.source.currentLoad(), "Processor", null, warnings),
         this.live(() => this.source.memory(), "Memory", null, warnings),
         this.cached(this.diskCache, now, () => this.source.disks(), "Disks", [], warnings),
+        this.live(() => this.source.diskIo(), "Disk activity", null, warnings),
         this.live(() => this.source.network(), "Network", [], warnings),
         this.live(() => this.source.battery(), "Battery", null, warnings),
         this.live(() => this.source.temperature(), "Temperature", null, warnings),
@@ -89,6 +96,12 @@ export class MonitorCollector {
         this.cached(this.gpuCache, now, () => this.source.graphics(), "Graphics", [], warnings),
         this.cached(this.processCache, now, () => this.source.processes(), "Processes", null, warnings),
       ]);
+
+    if (diskIo) {
+      const elapsed = this.diskIoBaseline ? now - this.diskIoBaseline.at : 0;
+      this.diskActivity = deriveDiskActivity(this.diskIoBaseline?.samples ?? null, diskIo, elapsed);
+      this.diskIoBaseline = { at: now, samples: diskIo.map((disk) => ({ ...disk })) };
+    }
 
     return normalizeMonitor({
       sampledAt: new Date(now).toISOString(),
@@ -98,6 +111,7 @@ export class MonitorCollector {
       cpu,
       memory,
       disks,
+      diskActivity: this.diskActivity,
       network,
       battery,
       temperature,

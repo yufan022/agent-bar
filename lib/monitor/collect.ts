@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import {
   battery,
   cpu,
@@ -13,6 +14,7 @@ import {
 import { createRequire } from "node:module";
 import os from "node:os";
 import { MonitorCollector, type MonitorSource } from "./collector.ts";
+import { DISK_IO_IOREG_ARGS, parseIoregDiskIo } from "./disk-io.ts";
 import { selectIfaceNames, type FanRaw, type MonitorSnapshot, type TemperatureRaw } from "./model.ts";
 import type {
   FanReading as AppleFan,
@@ -75,6 +77,13 @@ const systemInformationSource: MonitorSource = {
       sizeBytes: volume.size,
       usedBytes: volume.used,
     }));
+  },
+  async diskIo() {
+    if (process.platform !== "darwin") {
+      return [];
+    }
+    const stdout = await execFileText("ioreg", DISK_IO_IOREG_ARGS, 7_000);
+    return parseIoregDiskIo(stdout);
   },
   async network() {
     const names = await ifaceNames();
@@ -216,6 +225,23 @@ function readAppleSensors(): SensorSnapshot {
   } catch {
     return empty;
   }
+}
+
+function execFileText(command: string, args: readonly string[], timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      command,
+      args,
+      { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, encoding: "utf8" },
+      (error, stdout) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(stdout);
+      },
+    );
+  });
 }
 
 function finiteOrNull(value: unknown): number | null {

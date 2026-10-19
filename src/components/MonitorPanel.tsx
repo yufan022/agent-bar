@@ -7,6 +7,7 @@ import {
   formatBytesPair,
   formatCores,
   formatCount,
+  formatIops,
   formatLoad,
   formatPercent,
   formatPrecisePercent,
@@ -21,6 +22,7 @@ import {
   pushTrace,
   type BatteryReading,
   type CpuReading,
+  type DiskActivity,
   type DiskVolume,
   type FanReading,
   type GpuInfo,
@@ -198,7 +200,7 @@ function MonitorBody({
 
       <section className="card" aria-labelledby="monitor-disks">
         <h2 id="monitor-disks">Disks</h2>
-        <DiskList disks={snapshot.disks} />
+        <DiskList disks={snapshot.disks} activity={snapshot.diskActivity} />
       </section>
 
       <section className="card" aria-labelledby="monitor-network">
@@ -385,26 +387,59 @@ function GraphicsCard({ gpus }: { gpus: GpuInfo[] }) {
   );
 }
 
-function DiskList({ disks }: { disks: DiskVolume[] }) {
-  if (disks.length === 0) {
+function DiskList({ disks, activity }: { disks: DiskVolume[]; activity: DiskActivity[] }) {
+  if (disks.length === 0 && activity.length === 0) {
     return <p className="muted">No local volumes reported.</p>;
   }
   return (
-    <ul className="monitor-list">
-      {disks.map((disk) => (
-        <li key={disk.mount}>
-          <div className="monitor-split">
-            <span className="monitor-ellipsis">
-              {disk.label}
-              {disk.type ? <span className="muted"> {disk.type}</span> : null}
-            </span>
-            <span className="muted">{formatBytesPair(disk.usedBytes, disk.sizeBytes)}</span>
-          </div>
-          <Meter label={disk.label} value={disk.percent} />
-        </li>
-      ))}
-    </ul>
+    <>
+      {disks.length === 0 ? (
+        <p className="muted">No local volumes reported.</p>
+      ) : (
+        <ul className="monitor-list">
+          {disks.map((disk) => (
+            <li key={disk.mount}>
+              <div className="monitor-split">
+                <span className="monitor-ellipsis">
+                  {disk.label}
+                  {disk.type ? <span className="muted"> {disk.type}</span> : null}
+                </span>
+                <span className="muted">{formatBytesPair(disk.usedBytes, disk.sizeBytes)}</span>
+              </div>
+              <Meter label={disk.label} value={disk.percent} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {activity.length > 0 ? (
+        <>
+          <h3 id="monitor-disk-activity" className="monitor-activity-title">
+            Activity
+          </h3>
+          <ul className="monitor-list monitor-activity" aria-labelledby="monitor-disk-activity">
+            {activity.map((disk) => (
+              <li key={disk.aggregate ? "all-disks" : disk.name}>
+                <span className="monitor-ellipsis" translate={disk.aggregate ? undefined : "no"}>
+                  {disk.name}
+                </span>
+                <span className="monitor-rates">
+                  <span>Read {diskActivityDetail(disk.readBytesPerSec, disk.readIops)}</span>
+                  <span>Write {diskActivityDetail(disk.writeBytesPerSec, disk.writeIops)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </>
   );
+}
+
+function diskActivityDetail(bytesPerSec: number | null, iops: number | null): string {
+  if (bytesPerSec === null || iops === null) {
+    return "Measuring…";
+  }
+  return `${formatRate(bytesPerSec)} · ${formatIops(iops)}`;
 }
 
 function NetworkList({ ifaces }: { ifaces: NetworkIface[] }) {

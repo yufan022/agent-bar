@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import test from "node:test";
 import { MonitorCollector, type MonitorSource } from "./collector.ts";
+import { DISK_IO_IOREG_ARGS, parseIoregDiskIo } from "./disk-io.ts";
 import {
+  deriveDiskActivity,
   formatBytes,
   formatCount,
+  formatIops,
   formatRate,
   formatRpm,
   formatUptime,
@@ -12,6 +16,7 @@ import {
   pushTrace,
   selectIfaceNames,
   type BatteryRaw,
+  type DiskIoRaw,
   type DiskRaw,
   type MonitorProbe,
   type ProcessRaw,
@@ -26,6 +31,7 @@ function probe(partial: Partial<MonitorProbe>): MonitorProbe {
     cpu: null,
     memory: null,
     disks: [],
+    diskActivity: [],
     network: [],
     battery: null,
     temperature: null,
@@ -63,6 +69,7 @@ function source(overrides: Partial<MonitorSource> = {}): MonitorSource {
       swapUsedBytes: 25,
     }),
     disks: async () => [],
+    diskIo: async () => [],
     network: async () => [],
     battery: async () => ({
       hasBattery: false,
@@ -412,3 +419,206 @@ test("collector reports a still-reading warning when a probe stalls", async () =
   assert.match(snapshot.warnings.join(" "), /Still reading graphics/);
   assert.equal(snapshot.cpu?.percent, 12.4);
 });
+
+test("ioreg disk activity keeps named physical disks and ignores a driver without media", () => {
+  const disks = parseIoregDiskIo(`
++-o IOBlockStorageDriver  <class IOBlockStorageDriver, id 0x100000a1b, registered, matched, active, busy 0 (0 ms), retain 6>
+    {
+      "Statistics" = {"Operations (Write)"=0,"Bytes (Read)"=0,"Bytes (Write)"=0,"Operations (Read)"=0}
+    }
+
++-o IOBlockStorageDriver  <class IOBlockStorageDriver, id 0x100000967, registered, matched, active, busy 0 (72 ms), retain 8>
+  | {
+  |   "Statistics" = {"Bytes (Write)"=40,"Operations (Read)"=4,"Bytes (Read)"=100,"Operations (Write)"=10}
+  | }
+  +-o APPLE SSD AP0512R Media  <class IOMedia, id 0x100000968, registered, matched, active, busy 0 (72 ms), retain 12>
+
++-o IOBlockStorageDriver  <class IOBlockStorageDriver, id 0x100000999, registered, matched, active, busy 0 (0 ms), retain 8>
+  | {
+  |   "Statistics" = {"Operations (Write)"=1,"Bytes (Read)"=2,"Bytes (Write)"=3,"Operations (Read)"=4}
+  | }
+  +-o APPLE SSD AP0512R Media  <class IOMedia, id 0x10000099a, registered, matched, active, busy 0 (0 ms), retain 8>
+
++-o IOBlockStorageDriver  <class IOBlockStorageDriver, id 0x100000999, registered, matched, active, busy 0 (0 ms), retain 8>
+  | {
+  |   "Statistics" = {"Operations (Write)"=9,"Bytes (Read)"=8,"Bytes (Write)"=7,"Operations (Read)"=6}
+  | }
+  +-o Repeated Disk Media  <class IOMedia, id 0x10000099b, registered, matched, active, busy 0 (0 ms), retain 8>
+
++-o IOBlockStorageDriver  <class IOBlockStorageDriver, id 0x100000abc, registered, matched, active, busy 0 (0 ms), retain 8>
+  | {
+  |   "Statistics" = {"Bytes (Read)"=1,"Bytes (Write)"=1,"Operations (Write)"=1}
+  | }
+  +-o Incomplete Media  <class IOMedia, id 0x100000abd, registered, matched, active, busy 0 (0 ms), retain 8>
+`);
+  assert.deepEqual(disks, [
+    { id: "0x100000967", name: "APPLE SSD AP0512R", readBytes: 100, writeBytes: 40, readOps: 4, writeOps: 10 },
+    { id: "0x100000999", name: "APPLE SSD AP0512R 2", readBytes: 2, writeBytes: 3, readOps: 4, writeOps: 1 },
+  ]);
+});
+
+test("disk activity rates are per physical disk, with a total when several are present", () => {
+  const previous: DiskIoRaw[] = [
+    { id: "0x1", name: "Internal", readBytes: 1_000, writeBytes: 500, readOps: 10, writeOps: 4 },
+    { id: "0x2", name: "USB", readBytes: 100, writeBytes: 100, readOps: 2, writeOps: 2 },
+  ];
+  const current: DiskIoRaw[] = [
+    { id: "0x1", name: "Internal", readBytes: 3_000, writeBytes: 500, readOps: 30, writeOps: 4 },
+    { id: "0x2", name: "USB", readBytes: 1_100, writeBytes: 100, readOps: 6, writeOps: 2 },
+  ];
+  const first = deriveDiskActivity(null, current, 2_000);
+  assert.equal(first[0]?.readBytesPerSec, null);
+  assert.equal(first[2]?.name, "All disks");
+  const next = deriveDiskActivity(previous, current, 2_000);
+  assert.equal(next[0]?.readBytesPerSec, 1_000);
+  assert.equal(next[0]?.writeBytesPerSec, 0);
+  assert.equal(next[0]?.readIops, 10);
+  assert.equal(next[1]?.readBytesPerSec, 500);
+  assert.equal(next[1]?.readIops, 2);
+  assert.equal(next[2]?.aggregate, true);
+  assert.equal(next[2]?.readBytesPerSec, 1_500);
+  assert.equal(next[2]?.readIops, 12);
+  assert.equal(next[2]?.writeIops, 0);
+
+  const reset = deriveDiskActivity(
+    [{ ...previous[0], readBytes: 9_000 }],
+    [current[0]],
+    2_000,
+  );
+  assert.equal(reset[0]?.readBytesPerSec, null);
+  assert.equal(reset[0]?.writeBytesPerSec, 0);
+  assert.equal(reset.length, 1);
+
+  const stale = deriveDiskActivity(previous, current, 60_000);
+  assert.equal(stale[0]?.readBytesPerSec, null);
+  assert.equal(stale[2]?.readBytesPerSec, null);
+});
+
+test("disk activity formatting and normalization drop blank rows and recompute the total", () => {
+  assert.equal(formatIops(null), "Measuring…");
+  assert.equal(formatIops(0), `0\u00a0IOPS`);
+  assert.equal(formatIops(12.34), `12.3\u00a0IOPS`);
+  assert.equal(formatIops(120.6), `121\u00a0IOPS`);
+  const snapshot = normalizeMonitor(
+    probe({
+      diskActivity: [
+        {
+          name: "  Internal  ",
+          aggregate: false,
+          readBytesPerSec: -5,
+          writeBytesPerSec: 10,
+          readIops: Number.NaN,
+          writeIops: 2,
+        },
+        {
+          name: "USB",
+          aggregate: false,
+          readBytesPerSec: 4,
+          writeBytesPerSec: 6,
+          readIops: 1,
+          writeIops: 1,
+        },
+        {
+          name: "wrong total",
+          aggregate: true,
+          readBytesPerSec: 999,
+          writeBytesPerSec: 999,
+          readIops: 999,
+          writeIops: 999,
+        },
+        {
+          name: "   ",
+          aggregate: false,
+          readBytesPerSec: 1,
+          writeBytesPerSec: 1,
+          readIops: 1,
+          writeIops: 1,
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    snapshot.diskActivity.map((disk) => disk.name),
+    ["Internal", "USB", "All disks"],
+  );
+  assert.equal(snapshot.diskActivity[0]?.readBytesPerSec, null);
+  assert.equal(snapshot.diskActivity[0]?.readIops, null);
+  assert.equal(snapshot.diskActivity[2]?.readBytesPerSec, null);
+  assert.equal(snapshot.diskActivity[2]?.writeBytesPerSec, 16);
+  assert.equal(snapshot.diskActivity[2]?.writeIops, 3);
+});
+
+test("disk activity refreshes every sample while volume size stays cached", async () => {
+  let now = 1_000;
+  let volumes = 0;
+  let samples = 0;
+  let fail = false;
+  let readBytes = 0;
+  let readOps = 0;
+  const collector = new MonitorCollector(
+    source({
+      disks: async () => {
+        volumes += 1;
+        return [];
+      },
+      diskIo: async () => {
+        if (fail) {
+          throw new Error("ioreg unavailable");
+        }
+        samples += 1;
+        readBytes += 2_000;
+        readOps += 1;
+        return [{ id: "0x1", name: "SSD", readBytes, writeBytes: 0, readOps, writeOps: 0 }];
+      },
+    }),
+    () => now,
+  );
+  const first = await collector.collect();
+  assert.equal(first.diskActivity[0]?.readBytesPerSec, null);
+  assert.equal(first.diskActivity[0]?.name, "SSD");
+  now += 2_000;
+  const second = await collector.collect();
+  assert.equal(volumes, 1);
+  assert.equal(samples, 2);
+  assert.equal(second.diskActivity[0]?.readBytesPerSec, 1_000);
+  assert.equal(second.diskActivity[0]?.readIops, 0.5);
+  fail = true;
+  now += 2_000;
+  const failed = await collector.collect();
+  assert.equal(failed.diskActivity[0]?.readBytesPerSec, 1_000);
+  assert.match(failed.warnings.join(" "), /Disk activity/);
+  fail = false;
+  now += 2_000;
+  const recovered = await collector.collect();
+  assert.equal(volumes, 1);
+  assert.equal(recovered.diskActivity[0]?.readBytesPerSec, 500);
+  assert.equal(recovered.diskActivity[0]?.readIops, 0.25);
+});
+
+test("ioreg on this Mac parses at least one physical disk", async () => {
+  if (process.platform !== "darwin") {
+    return;
+  }
+  const stdout = await execFileText(DISK_IO_IOREG_ARGS);
+  const disks = parseIoregDiskIo(stdout);
+  assert.ok(disks.length >= 1);
+  for (const disk of disks) {
+    assert.match(disk.id, /^0x[0-9a-f]+$/);
+    assert.equal(disk.name.length > 0, true);
+    assert.equal(disk.name.endsWith(" Media"), false);
+    assert.equal(Number.isSafeInteger(disk.readBytes), true);
+    assert.equal(Number.isSafeInteger(disk.writeOps), true);
+  }
+});
+
+function execFileText(args: readonly string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile("ioreg", args, { timeout: 7_000, maxBuffer: 4 * 1024 * 1024, encoding: "utf8" }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(stdout);
+    });
+  });
+}

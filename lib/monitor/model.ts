@@ -57,6 +57,15 @@ export interface DiskVolume {
   percent: number;
 }
 
+export interface DiskActivity {
+  name: string;
+  aggregate: boolean;
+  readBytesPerSec: number | null;
+  writeBytesPerSec: number | null;
+  readIops: number | null;
+  writeIops: number | null;
+}
+
 export interface NetworkIface {
   name: string;
   state: "up" | "down" | "unknown";
@@ -123,6 +132,7 @@ export interface MonitorSnapshot {
   cpu: CpuReading | null;
   memory: MemoryReading | null;
   disks: DiskVolume[];
+  diskActivity: DiskActivity[];
   network: NetworkIface[];
   battery: BatteryReading | null;
   temperature: TemperatureReading | null;
@@ -167,6 +177,15 @@ export interface DiskRaw {
   mount: string;
   sizeBytes: number;
   usedBytes: number;
+}
+
+export interface DiskIoRaw {
+  id: string;
+  name: string;
+  readBytes: number;
+  writeBytes: number;
+  readOps: number;
+  writeOps: number;
 }
 
 export interface NetworkRaw {
@@ -237,6 +256,7 @@ export interface MonitorProbe {
   cpu: CpuRaw | null;
   memory: MemoryRaw | null;
   disks: readonly DiskRaw[];
+  diskActivity: readonly DiskActivity[];
   network: readonly NetworkRaw[];
   battery: BatteryRaw | null;
   temperature: TemperatureRaw | null;
@@ -293,6 +313,7 @@ export function normalizeMonitor(probe: MonitorProbe): MonitorSnapshot {
     cpu: normalizeCpu(probe.cpu),
     memory: normalizeMemory(probe.memory),
     disks: normalizeDisks(probe.disks),
+    diskActivity: normalizeDiskActivity(probe.diskActivity),
     network: normalizeNetwork(probe.network),
     battery: normalizeBattery(probe.battery),
     temperature: normalizeTemperature(probe.temperature),
@@ -388,6 +409,58 @@ export function formatRate(bytesPerSec: number | null): string {
     return "Measuring…";
   }
   return `${formatBytes(bytesPerSec)}/s`;
+}
+
+export function formatIops(value: number | null): string {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return "Measuring…";
+  }
+  const formatted = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: value >= 100 ? 0 : 1,
+  }).format(value);
+  return `${formatted}\u00a0IOPS`;
+}
+
+const DISK_ACTIVITY_MAX_INTERVAL_MS = 30_000;
+
+// Rates are deltas of cumulative counters. The first sample, a counter reset,
+// and a gap long enough to be an average rather than a current rate stay empty.
+export function deriveDiskActivity(
+  previous: readonly DiskIoRaw[] | null,
+  current: readonly DiskIoRaw[],
+  elapsedMs: number,
+): DiskActivity[] {
+  const prior = new Map<string, DiskIoRaw>();
+  for (const disk of previous ?? []) {
+    if (disk.id && !prior.has(disk.id)) {
+      prior.set(disk.id, disk);
+    }
+  }
+  const reset =
+    previous === null ||
+    !Number.isFinite(elapsedMs) ||
+    elapsedMs <= 0 ||
+    elapsedMs > DISK_ACTIVITY_MAX_INTERVAL_MS;
+  const rows: DiskActivity[] = [];
+  const seen = new Set<string>();
+  for (const disk of current) {
+    const name = disk.name.trim();
+    if (!disk.id || !name || seen.has(disk.id)) {
+      continue;
+    }
+    seen.add(disk.id);
+    const before = prior.get(disk.id);
+    rows.push({
+      name,
+      aggregate: false,
+      readBytesPerSec: reset || !before ? null : perSecond(before.readBytes, disk.readBytes, elapsedMs),
+      writeBytesPerSec: reset || !before ? null : perSecond(before.writeBytes, disk.writeBytes, elapsedMs),
+      readIops: reset || !before ? null : perSecond(before.readOps, disk.readOps, elapsedMs),
+      writeIops: reset || !before ? null : perSecond(before.writeOps, disk.writeOps, elapsedMs),
+    });
+  }
+  return withDiskTotal(rows);
 }
 
 export function formatUptime(seconds: number): string {
@@ -548,6 +621,66 @@ function normalizeDisks(disks: readonly DiskRaw[]): DiskVolume[] {
       usedBytes: nonNegative(disk.usedBytes),
       percent: clampPercent((disk.usedBytes / disk.sizeBytes) * 100),
     }));
+}
+
+function normalizeDiskActivity(rows: readonly DiskActivity[]): DiskActivity[] {
+  const physical: DiskActivity[] = [];
+  for (const row of rows) {
+    if (row.aggregate) {
+      continue;
+    }
+    const name = row.name.replace(/\s+/g, " ").trim();
+    if (!name) {
+      continue;
+    }
+    physical.push({
+      name: clip(name, 80),
+      aggregate: false,
+      readBytesPerSec: rate(row.readBytesPerSec),
+      writeBytesPerSec: rate(row.writeBytesPerSec),
+      readIops: rate(row.readIops),
+      writeIops: rate(row.writeIops),
+    });
+    if (physical.length >= 8) {
+      break;
+    }
+  }
+  return withDiskTotal(physical);
+}
+
+function withDiskTotal(rows: readonly DiskActivity[]): DiskActivity[] {
+  if (rows.length < 2) {
+    return [...rows];
+  }
+  return [
+    ...rows,
+    {
+      name: "All disks",
+      aggregate: true,
+      readBytesPerSec: sumRates(rows.map((row) => row.readBytesPerSec)),
+      writeBytesPerSec: sumRates(rows.map((row) => row.writeBytesPerSec)),
+      readIops: sumRates(rows.map((row) => row.readIops)),
+      writeIops: sumRates(rows.map((row) => row.writeIops)),
+    },
+  ];
+}
+
+function sumRates(values: readonly (number | null)[]): number | null {
+  let total = 0;
+  for (const value of values) {
+    if (value === null || !Number.isFinite(value)) {
+      return null;
+    }
+    total += value;
+  }
+  return total;
+}
+
+function perSecond(before: number, after: number, elapsedMs: number): number | null {
+  if (!Number.isFinite(before) || !Number.isFinite(after) || before < 0 || after < before) {
+    return null;
+  }
+  return ((after - before) * 1000) / elapsedMs;
 }
 
 function normalizeNetwork(ifaces: readonly NetworkRaw[]): NetworkIface[] {
