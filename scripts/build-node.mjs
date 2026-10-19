@@ -7,7 +7,7 @@ const shared = {
   bundle: true,
   platform: "node",
   target: "node22",
-  external: ["electron"],
+  external: ["electron", "systeminformation", "macos-temperature-sensor", "osx-temperature-sensor"],
   sourcemap: true,
   logLevel: "info",
 };

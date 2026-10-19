@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAgentsQuota, onOpenSettings, onQuotaUpdated, refreshQuota } from "./api";
+import { getAgentsQuota, onOpenMonitor, onOpenSettings, onQuotaUpdated, refreshQuota } from "./api";
 import { AgentPlaceholder } from "./components/AgentPlaceholder";
 import { BridgePanel } from "./components/BridgePanel";
 import { CodexPanel } from "./components/CodexPanel";
 import { CursorPanel } from "./components/CursorPanel";
+import { MonitorPanel } from "./components/MonitorPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import type { AgentsQuotaResponse, QuotaSnapshot } from "./types";
 import { formatTime } from "./types";
 
-type View = "home" | "settings" | "bridge";
+type View = "home" | "settings" | "bridge" | "monitor";
 
 function boardAgents(agents: QuotaSnapshot[]): QuotaSnapshot[] {
   return [...agents].sort((a, b) => {
@@ -50,6 +51,24 @@ function SettingsIcon() {
   );
 }
 
+function MonitorIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 12h3l2-5 4 10 2-5h7" />
+    </svg>
+  );
+}
+
 function BridgeIcon() {
   return (
     <svg
@@ -79,6 +98,8 @@ function titleForView(view: View): string {
       return "Settings";
     case "bridge":
       return "Bridge";
+    case "monitor":
+      return "Monitor";
     default:
       return "agent-bar";
   }
@@ -93,6 +114,8 @@ function subtitleForView(
       return "Preferences";
     case "bridge":
       return "Sync instructions, skills & MCP";
+    case "monitor":
+      return "This Mac";
     default:
       return data
         ? `Last refresh ${formatTime(data.refreshedAt)}`
@@ -145,6 +168,9 @@ function App() {
     const unlistenSettings = onOpenSettings(() => {
       setView("settings");
     });
+    const unlistenMonitor = onOpenMonitor(() => {
+      setView("monitor");
+    });
 
     return () => {
       if (unlistenQuota) {
@@ -153,11 +179,17 @@ function App() {
       if (unlistenSettings) {
         unlistenSettings();
       }
+      if (unlistenMonitor) {
+        unlistenMonitor();
+      }
     };
   }, [loadCached, refresh]);
 
   return (
     <div className="shell">
+      <a className="skip-link" href="#content">
+        Skip to content
+      </a>
       <header className="top-bar">
         <div>
           <h1>{titleForView(view)}</h1>
@@ -166,6 +198,15 @@ function App() {
         <div className="top-bar-actions">
           {view === "home" ? (
             <>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Monitor"
+                title="Monitor"
+                onClick={() => setView("monitor")}
+              >
+                <MonitorIcon />
+              </button>
               <button
                 type="button"
                 className="icon-btn"
@@ -205,9 +246,10 @@ function App() {
         </div>
       </header>
 
-      <main className="content">
+      <main id="content" className="content" tabIndex={-1}>
         {view === "settings" ? <SettingsPanel /> : null}
         {view === "bridge" ? <BridgePanel /> : null}
+        {view === "monitor" ? <MonitorPanel /> : null}
         {view === "home" ? (
           <div className="agent-board" aria-busy={loading && !data}>
             {loading && !data ? (

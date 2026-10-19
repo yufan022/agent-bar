@@ -32,6 +32,14 @@ export function onOpenSettings(callback: () => void): () => void {
   return client().onOpenSettings(callback);
 }
 
+export function onOpenMonitor(callback: () => void): () => void {
+  return client().onOpenMonitor(callback);
+}
+
+export function monitorSample() {
+  return unwrap(client().monitorSample());
+}
+
 export function bridgeStatus(tool: string | null) {
   return unwrap(client().bridgeStatus(tool));
 }

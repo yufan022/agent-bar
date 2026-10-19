@@ -1,0 +1,539 @@
+import { useEffect, useState, type ReactNode } from "react";
+import { monitorSample } from "../api";
+import {
+  batteryStatus,
+  batteryTone,
+  formatBytes,
+  formatBytesPair,
+  formatCores,
+  formatCount,
+  formatLoad,
+  formatPercent,
+  formatPrecisePercent,
+  formatRate,
+  formatSampleTime,
+  formatTemperature,
+  formatUptime,
+  MONITOR_POLL_MS,
+  MONITOR_TRACE_LIMIT,
+  percentTone,
+  pushTrace,
+  type BatteryReading,
+  type CpuReading,
+  type DiskVolume,
+  type GpuInfo,
+  type HostInfo,
+  type MemoryReading,
+  type MonitorSnapshot,
+  type NetworkIface,
+  type ProcessReading,
+  type TemperatureReading,
+  type TraceSample,
+} from "../../lib/monitor/model.ts";
+
+function messageFrom(error: unknown): string {
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return "The sample failed.";
+}
+
+export function MonitorPanel() {
+  const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
+  const [history, setHistory] = useState<TraceSample[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let stopped = false;
+    let timer = 0;
+
+    const tick = async () => {
+      if (stopped) {
+        return;
+      }
+      const started = Date.now();
+      try {
+        const next = await monitorSample();
+        if (stopped) {
+          return;
+        }
+        setSnapshot(next);
+        setError(null);
+        setHistory((current) =>
+          pushTrace(
+            current,
+            {
+              cpu: next.cpu?.percent ?? null,
+              memory: next.memory?.percent ?? null,
+            },
+            MONITOR_TRACE_LIMIT,
+          ),
+        );
+      } catch (err) {
+        if (!stopped) {
+          setError(messageFrom(err));
+        }
+      }
+      if (stopped || document.hidden) {
+        return;
+      }
+      const wait = Math.max(250, MONITOR_POLL_MS - (Date.now() - started));
+      timer = window.setTimeout(() => {
+        void tick();
+      }, wait);
+    };
+
+    const onVisibility = () => {
+      window.clearTimeout(timer);
+      if (!document.hidden) {
+        void tick();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    void tick();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  return (
+    <div className="monitor" aria-busy={snapshot === null && error === null}>
+      {error ? (
+        <p className="error-text" role="alert">
+          {snapshot
+            ? `The latest sample failed. Showing the previous reading. ${error}`
+            : `Couldn’t read this Mac. ${error}`}
+        </p>
+      ) : null}
+      {snapshot === null && error === null ? (
+        <p className="muted" role="status">
+          Reading this Mac…
+        </p>
+      ) : null}
+      {snapshot ? <MonitorBody snapshot={snapshot} history={history} /> : null}
+    </div>
+  );
+}
+
+function MonitorBody({
+  snapshot,
+  history,
+}: {
+  snapshot: MonitorSnapshot;
+  history: TraceSample[];
+}) {
+  return (
+    <>
+      <section className="card monitor-scope" aria-label="Processor and memory">
+        <HostLine host={snapshot.host} />
+        <Trace
+          title="Processor"
+          value={snapshot.cpu?.percent ?? null}
+          series={history.map((sample) => sample.cpu)}
+          stroke="monitor-spark-cpu"
+          detail={snapshot.host?.cpu ?? ""}
+          extra={snapshot.host ? formatCores(snapshot.host) : ""}
+        >
+          {snapshot.cpu && snapshot.cpu.cores.length > 0 ? <CoreStrip cpu={snapshot.cpu} /> : null}
+        </Trace>
+        <Trace
+          title="Memory"
+          value={snapshot.memory?.percent ?? null}
+          series={history.map((sample) => sample.memory)}
+          stroke="monitor-spark-memory"
+          detail={memoryDetail(snapshot.memory)}
+          extra={cacheDetail(snapshot.memory)}
+        >
+          {snapshot.memory && snapshot.memory.swapTotalBytes > 0 ? (
+            <div className="monitor-swap">
+              <div className="metric-row">
+                <span>Swap</span>
+                <strong>
+                  {formatBytesPair(snapshot.memory.swapUsedBytes, snapshot.memory.swapTotalBytes)}
+                </strong>
+              </div>
+              <Meter label="Swap" value={snapshot.memory.swapPercent} />
+            </div>
+          ) : null}
+        </Trace>
+      </section>
+
+      <div className="monitor-grid">
+        <section className="card" aria-labelledby="monitor-load">
+          <h2 id="monitor-load">Load</h2>
+          <dl className="monitor-load">
+            <div>
+              <dt>1 min</dt>
+              <dd>{formatLoad(snapshot.load.one)}</dd>
+            </div>
+            <div>
+              <dt>5 min</dt>
+              <dd>{formatLoad(snapshot.load.five)}</dd>
+            </div>
+            <div>
+              <dt>15 min</dt>
+              <dd>{formatLoad(snapshot.load.fifteen)}</dd>
+            </div>
+          </dl>
+        </section>
+        {snapshot.battery ? <BatteryCard battery={snapshot.battery} /> : null}
+        <TemperatureCard temperature={snapshot.temperature} />
+        <GraphicsCard gpus={snapshot.gpus} />
+      </div>
+
+      <section className="card" aria-labelledby="monitor-disks">
+        <h2 id="monitor-disks">Disks</h2>
+        <DiskList disks={snapshot.disks} />
+      </section>
+
+      <section className="card" aria-labelledby="monitor-network">
+        <h2 id="monitor-network">Network</h2>
+        <NetworkList ifaces={snapshot.network} />
+      </section>
+
+      <section className="card" aria-labelledby="monitor-processes">
+        <h2 id="monitor-processes">Processes</h2>
+        <ProcessList processes={snapshot.processes} />
+      </section>
+
+      {snapshot.warnings.length > 0 ? (
+        <p className="monitor-warning">{snapshot.warnings.join(" ")}</p>
+      ) : null}
+      <p className="footer-meta">Sampled {formatSampleTime(snapshot.sampledAt)}</p>
+    </>
+  );
+}
+
+function HostLine({ host }: { host: HostInfo | null }) {
+  if (!host) {
+    return <p className="monitor-host muted">Reading system details…</p>;
+  }
+  const parts = [host.os, host.arch, `up ${formatUptime(host.uptimeSec)}`].filter(Boolean);
+  return (
+    <p className="monitor-host muted">
+      <span translate="no">{host.hostname}</span>
+      {parts.length > 0 ? `, ${parts.join(", ")}` : ""}
+    </p>
+  );
+}
+
+function Trace({
+  title,
+  value,
+  series,
+  stroke,
+  detail,
+  extra,
+  children,
+}: {
+  title: string;
+  value: number | null;
+  series: Array<number | null>;
+  stroke: string;
+  detail: string;
+  extra: string;
+  children?: ReactNode;
+}) {
+  const tone = percentTone(value);
+  return (
+    <div className="monitor-trace">
+      <header className="card-header">
+        <h2>{title}</h2>
+        <strong className={tone === "ok" ? "monitor-figure" : `monitor-figure monitor-tone-${tone}`}>
+          {formatPercent(value)}
+        </strong>
+      </header>
+      {detail ? (
+        <p className="muted" translate="no">
+          {detail}
+        </p>
+      ) : null}
+      {extra ? <p className="muted">{extra}</p> : null}
+      <Sparkline
+        values={series}
+        className={stroke}
+        label={`${title} history, now ${formatPercent(value)}`}
+      />
+      {children}
+    </div>
+  );
+}
+
+function CoreStrip({ cpu }: { cpu: CpuReading }) {
+  const busiest = Math.max(...cpu.cores);
+  return (
+    <div
+      className="monitor-cores"
+      role="img"
+      aria-label={`${formatCount(cpu.cores.length)} cores, busiest ${formatPercent(busiest)}`}
+    >
+      {cpu.cores.map((value, index) => (
+        <div key={index} className="monitor-core">
+          <span
+            className={value >= 90 ? "monitor-core-hot" : undefined}
+            style={{ height: `${Math.max(0, Math.min(100, value))}%` }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BatteryCard({ battery }: { battery: BatteryReading }) {
+  return (
+    <section className="card" aria-labelledby="monitor-battery">
+      <header className="card-header">
+        <h2 id="monitor-battery">Battery</h2>
+        <strong className="monitor-figure">{formatPercent(battery.percent)}</strong>
+      </header>
+      <p className="muted">{batteryStatus(battery)}</p>
+      <Meter label="Battery" value={battery.percent} tone={batteryTone(battery.percent)} />
+    </section>
+  );
+}
+
+function TemperatureCard({ temperature }: { temperature: TemperatureReading | null }) {
+  const primary = temperature?.mainC ?? temperature?.maxC ?? temperature?.chipsetC ?? null;
+  const chipset = temperature?.chipsetC ?? null;
+  return (
+    <section className="card" aria-labelledby="monitor-temperature">
+      <h2 id="monitor-temperature">Temperature</h2>
+      {primary === null ? (
+        <p className="muted">Temperature isn’t available in this session.</p>
+      ) : (
+        <>
+          <p className="monitor-figure">{formatTemperature(primary)}</p>
+          {chipset !== null && chipset !== primary ? (
+            <p className="muted">Chipset {formatTemperature(chipset)}</p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function GraphicsCard({ gpus }: { gpus: GpuInfo[] }) {
+  return (
+    <section className="card" aria-labelledby="monitor-graphics">
+      <h2 id="monitor-graphics">Graphics</h2>
+      {gpus.length === 0 ? (
+        <p className="muted">No graphics adapter reported.</p>
+      ) : (
+        <ul className="monitor-list">
+          {gpus.map((gpu, index) => {
+            const detail = gpuDetail(gpu);
+            return (
+              <li key={`${gpu.model}-${index}`}>
+                <span translate="no">{gpu.model}</span>
+                {detail ? <span className="muted">{detail}</span> : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function DiskList({ disks }: { disks: DiskVolume[] }) {
+  if (disks.length === 0) {
+    return <p className="muted">No local volumes reported.</p>;
+  }
+  return (
+    <ul className="monitor-list">
+      {disks.map((disk) => (
+        <li key={disk.mount}>
+          <div className="monitor-split">
+            <span className="monitor-ellipsis">
+              {disk.label}
+              {disk.type ? <span className="muted"> {disk.type}</span> : null}
+            </span>
+            <span className="muted">{formatBytesPair(disk.usedBytes, disk.sizeBytes)}</span>
+          </div>
+          <Meter label={disk.label} value={disk.percent} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NetworkList({ ifaces }: { ifaces: NetworkIface[] }) {
+  if (ifaces.length === 0) {
+    return <p className="muted">No active interface reported.</p>;
+  }
+  return (
+    <ul className="monitor-list">
+      {ifaces.map((iface) => (
+        <li key={iface.name}>
+          <span translate="no">{iface.name}</span>
+          {iface.state === "unknown" ? null : <span className="muted">{ifaceLabel(iface.state)}</span>}
+          <span className="monitor-rates">
+            <span>In {formatRate(iface.rxBytesPerSec)}</span>
+            <span>Out {formatRate(iface.txBytesPerSec)}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProcessList({ processes }: { processes: ProcessReading | null }) {
+  if (!processes) {
+    return <p className="muted">Process list isn’t available.</p>;
+  }
+  return (
+    <>
+      <p className="muted">
+        {formatCount(processes.all)} processes, {formatCount(processes.running)} running
+      </p>
+      {processes.top.length === 0 ? (
+        <p className="muted">No processes reported.</p>
+      ) : (
+        <table className="monitor-table">
+          <caption className="sr-only">Processes using the most processor</caption>
+          <thead>
+            <tr>
+              <th scope="col">Process</th>
+              <th scope="col" className="num col-pid">
+                PID
+              </th>
+              <th scope="col" className="num col-pct">
+                CPU
+              </th>
+              <th scope="col" className="num col-pct">
+                Memory
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {processes.top.map((row) => (
+              <tr key={row.pid}>
+                <th scope="row" className="monitor-name" translate="no">
+                  {row.name}
+                </th>
+                <td className="num">{formatCount(row.pid)}</td>
+                <td className="num">{formatPrecisePercent(row.cpuPercent)}</td>
+                <td className="num">{formatPrecisePercent(row.memPercent)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
+
+function Sparkline({
+  values,
+  label,
+  className,
+}: {
+  values: Array<number | null>;
+  label: string;
+  className: string;
+}) {
+  const width = 160;
+  const height = 36;
+  const finite = values.map((value) =>
+    value === null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value)),
+  );
+  let path = "";
+  if (finite.length > 1) {
+    const step = width / (finite.length - 1);
+    finite.forEach((value, index) => {
+      if (value === null) {
+        return;
+      }
+      const x = index * step;
+      const y = height - (value / 100) * (height - 2) - 1;
+      const command = path === "" || finite[index - 1] === null ? "M" : "L";
+      path += `${command}${x.toFixed(1)} ${y.toFixed(1)}`;
+    });
+  }
+  return (
+    <svg
+      className={`monitor-spark ${className}`}
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={label}
+      preserveAspectRatio="none"
+    >
+      {path ? (
+        <path d={path} fill="none" stroke="currentColor" strokeWidth="1.75" vectorEffect="non-scaling-stroke" />
+      ) : null}
+    </svg>
+  );
+}
+
+function Meter({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number | null;
+  tone?: "ok" | "warn" | "critical";
+}) {
+  const resolved = tone ?? percentTone(value);
+  const clamped = value === null ? 0 : Math.max(0, Math.min(100, value));
+  return (
+    <div
+      className="progress-track"
+      role="meter"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(clamped)}
+      aria-valuetext={formatPercent(value)}
+    >
+      <div className={`progress-fill progress-${resolved}`} style={{ width: `${clamped}%` }} />
+    </div>
+  );
+}
+
+function memoryDetail(memory: MemoryReading | null): string {
+  if (!memory) {
+    return "";
+  }
+  return `${formatBytes(memory.usedBytes)} in use, ${formatBytes(memory.availableBytes)} available`;
+}
+
+function cacheDetail(memory: MemoryReading | null): string {
+  if (!memory || memory.cacheBytes <= 0) {
+    return "";
+  }
+  return `File cache ${formatBytes(memory.cacheBytes)}`;
+}
+
+function gpuDetail(gpu: GpuInfo): string {
+  const parts: string[] = [];
+  if (gpu.cores) {
+    parts.push(`${formatCount(gpu.cores)} cores`);
+  }
+  if (gpu.vramBytes) {
+    parts.push(gpu.shared ? `${formatBytes(gpu.vramBytes)} shared` : formatBytes(gpu.vramBytes));
+  }
+  if (gpu.temperatureC !== null) {
+    parts.push(formatTemperature(gpu.temperatureC));
+  }
+  if (gpu.utilization !== null) {
+    parts.push(formatPercent(gpu.utilization));
+  }
+  return parts.join(", ");
+}
+
+function ifaceLabel(state: NetworkIface["state"]): string {
+  if (state === "up") {
+    return "Active";
+  }
+  if (state === "down") {
+    return "Inactive";
+  }
+  return "Unknown";
+}

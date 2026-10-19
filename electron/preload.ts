@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type { AgentBarApi } from "../lib/ipc.ts";
 import type { AgentsQuotaResponse, BridgeSyncRequest } from "../lib/ipc-types.ts";
+import type { MonitorSnapshot } from "../lib/monitor/model.ts";
 
 const api: AgentBarApi = {
   getAgentsQuota: () => ipcRenderer.invoke("quota:get"),
@@ -23,6 +24,16 @@ const api: AgentBarApi = {
       ipcRenderer.removeListener("open-settings", listener);
     };
   },
+  onOpenMonitor: (callback) => {
+    const listener = () => {
+      callback();
+    };
+    ipcRenderer.on("open-monitor", listener);
+    return () => {
+      ipcRenderer.removeListener("open-monitor", listener);
+    };
+  },
+  monitorSample: () => ipcRenderer.invoke("monitor:sample") as Promise<MonitorSnapshot>,
   bridgeStatus: (tool) => ipcRenderer.invoke("bridge:status", tool),
   bridgeDetails: (tool) => ipcRenderer.invoke("bridge:details", tool),
   bridgeDiff: (from, to) => ipcRenderer.invoke("bridge:diff", from, to),

@@ -17,14 +17,15 @@
     "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit && node scripts/build-node.mjs && vite build",
     "start": "electron .",
     "dist": "pnpm build && electron-builder",
-    "test": "node --test lib/bridge/bridge.test.ts lib/quota/quota.test.ts",
+    "test": "node --test lib/bridge/bridge.test.ts lib/quota/quota.test.ts lib/monitor/monitor.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "smol-toml": "^1.9.1"
+    "smol-toml": "^1.9.1",
+    "systeminformation": "^5.33.15"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
@@ -50,7 +51,8 @@
       "dist/renderer/**/*",
       "dist-electron/**/*",
       "assets/icons/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/systeminformation/**/*"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

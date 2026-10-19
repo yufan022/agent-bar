@@ -5,10 +5,13 @@ import { fileURLToPath } from "node:url";
 import { details, diff, status, sync } from "../lib/bridge/sync.ts";
 import { parseSyncKinds, parseToolId } from "../lib/bridge/tool.ts";
 import type { BridgeSyncRequest } from "../lib/ipc-types.ts";
+import { collectMonitor } from "../lib/monitor/collect.ts";
 import { fetchAllAgents } from "../lib/quota/fetch.ts";
 import { formatTooltip, type AgentsQuotaResponse } from "../lib/quota/model.ts";
 
 const POLL_MS = 300_000;
+// Keep the popover open for local inspection. Unset for normal menu-bar behavior.
+const showOnStart = process.env.AGENT_BAR_SHOW === "1";
 const DEV_URL = process.env.ELECTRON_RENDERER_URL ?? "http://127.0.0.1:1420";
 const POPOVER_WIDTH = 920;
 const POPOVER_HEIGHT = 740;
@@ -73,7 +76,7 @@ function createWindow(): BrowserWindow {
   const popup = new BrowserWindow({
     width: initial.width,
     height: initial.height,
-    show: false,
+    show: showOnStart,
     frame: false,
     transparent: true,
     resizable: false,
@@ -93,7 +96,7 @@ function createWindow(): BrowserWindow {
   });
   popup.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   popup.on("blur", () => {
-    if (pointerOnTray() || isQuitting) {
+    if (showOnStart || pointerOnTray() || isQuitting) {
       return;
     }
     popup.hide();
@@ -143,6 +146,12 @@ function createTray(): Tray {
       label: "Refresh",
       click: () => {
         void refreshAndEmit();
+      },
+    },
+    {
+      label: "Monitor…",
+      click: () => {
+        openMonitor();
       },
     },
     {
@@ -202,6 +211,7 @@ function registerIpc(): void {
     });
     return { ok: report.errors.length === 0, report };
   });
+  ipcMain.handle("monitor:sample", () => collectMonitor());
   ipcMain.handle("autostart:is-enabled", () => app.getLoginItemSettings().openAtLogin);
   ipcMain.handle("autostart:enable", () => {
     app.setLoginItemSettings({ openAtLogin: true });
@@ -272,6 +282,11 @@ function showPopover(): void {
 function openSettings(): void {
   showPopover();
   window?.webContents.send("open-settings");
+}
+
+function openMonitor(): void {
+  showPopover();
+  window?.webContents.send("open-monitor");
 }
 
 function pointerOnTray(): boolean {
