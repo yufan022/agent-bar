@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { getAgentsQuota, onOpenMonitor, onOpenSettings, onQuotaUpdated, refreshQuota } from "./api";
 import { AgentPlaceholder } from "./components/AgentPlaceholder";
 import { BridgePanel } from "./components/BridgePanel";
@@ -10,6 +10,13 @@ import type { AgentsQuotaResponse, QuotaSnapshot } from "./types";
 import { formatTime } from "./types";
 
 type View = "home" | "settings" | "bridge" | "monitor";
+type SectionView = Exclude<View, "settings">;
+
+const SECTIONS: { id: SectionView; label: string }[] = [
+  { id: "home", label: "Usage" },
+  { id: "monitor", label: "Monitor" },
+  { id: "bridge", label: "Bridge" },
+];
 
 function boardAgents(agents: QuotaSnapshot[]): QuotaSnapshot[] {
   return [...agents].sort((a, b) => {
@@ -51,47 +58,6 @@ function SettingsIcon() {
   );
 }
 
-function MonitorIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 12h3l2-5 4 10 2-5h7" />
-    </svg>
-  );
-}
-
-function BridgeIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M6 8h12" />
-      <path d="M6 16h12" />
-      <path d="M8 8v8" />
-      <path d="M16 8v8" />
-      <path d="M4 12h4" />
-      <path d="M16 12h4" />
-    </svg>
-  );
-}
-
 function titleForView(view: View): string {
   switch (view) {
     case "settings":
@@ -123,8 +89,66 @@ function subtitleForView(
   }
 }
 
+function SectionTabs({
+  view,
+  onChange,
+}: {
+  view: SectionView;
+  onChange: (view: SectionView) => void;
+}) {
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let next = index;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      next = (index + 1) % SECTIONS.length;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      next = (index - 1 + SECTIONS.length) % SECTIONS.length;
+    } else if (event.key === "Home") {
+      next = 0;
+    } else if (event.key === "End") {
+      next = SECTIONS.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    const target = SECTIONS[next];
+    if (!target) {
+      return;
+    }
+    onChange(target.id);
+    document.getElementById(`section-tab-${target.id}`)?.focus();
+  };
+
+  return (
+    <nav className="agent-tabs section-tabs" role="tablist" aria-label="Sections">
+      {SECTIONS.map((section, index) => {
+        const selected = view === section.id;
+        return (
+          <button
+            key={section.id}
+            id={`section-tab-${section.id}`}
+            type="button"
+            role="tab"
+            className={selected ? "agent-tab agent-tab-active" : "agent-tab"}
+            aria-selected={selected}
+            aria-controls="content"
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onChange(section.id)}
+            onKeyDown={(event) => onKeyDown(event, index)}
+          >
+            {section.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 function App() {
   const [view, setView] = useState<View>("home");
+  const sectionRef = useRef<SectionView>("home");
+  if (view !== "settings") {
+    sectionRef.current = view;
+  }
   const [data, setData] = useState<AgentsQuotaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -196,26 +220,16 @@ function App() {
           <p className="muted">{subtitleForView(view, data)}</p>
         </div>
         <div className="top-bar-actions">
-          {view === "home" ? (
+          {view === "settings" ? (
+            <button
+              type="button"
+              className="refresh-btn"
+              onClick={() => setView(sectionRef.current)}
+            >
+              Done
+            </button>
+          ) : (
             <>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Monitor"
-                title="Monitor"
-                onClick={() => setView("monitor")}
-              >
-                <MonitorIcon />
-              </button>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Bridge"
-                title="Bridge"
-                onClick={() => setView("bridge")}
-              >
-                <BridgeIcon />
-              </button>
               <button
                 type="button"
                 className="icon-btn"
@@ -225,28 +239,32 @@ function App() {
               >
                 <SettingsIcon />
               </button>
-              <button
-                type="button"
-                className="refresh-btn"
-                onClick={() => void refresh()}
-                disabled={refreshing}
-              >
-                {refreshing ? "Refreshing…" : "Refresh"}
-              </button>
+              {view === "home" ? (
+                <button
+                  type="button"
+                  className="refresh-btn"
+                  onClick={() => void refresh()}
+                  disabled={refreshing}
+                >
+                  {refreshing ? "Refreshing…" : "Refresh"}
+                </button>
+              ) : null}
             </>
-          ) : (
-            <button
-              type="button"
-              className="refresh-btn"
-              onClick={() => setView("home")}
-            >
-              Done
-            </button>
           )}
         </div>
       </header>
 
-      <main id="content" className="content" tabIndex={-1}>
+      {view === "settings" ? null : (
+        <SectionTabs view={view} onChange={setView} />
+      )}
+
+      <main
+        id="content"
+        className="content"
+        tabIndex={-1}
+        role={view === "settings" ? undefined : "tabpanel"}
+        aria-labelledby={view === "settings" ? undefined : `section-tab-${view}`}
+      >
         {view === "settings" ? <SettingsPanel /> : null}
         {view === "bridge" ? <BridgePanel /> : null}
         {view === "monitor" ? <MonitorPanel /> : null}
