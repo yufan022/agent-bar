@@ -1085,6 +1085,13 @@ body {
   white-space: nowrap;
 }
 
+.monitor-bytes {
+  flex: none;
+  color: #f0f3f7;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .monitor-rates {
   display: flex;
   gap: 12px;

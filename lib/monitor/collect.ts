@@ -121,6 +121,8 @@ const systemInformationSource: MonitorSource = {
         name: item.name,
         cpuPercent: item.cpu,
         memPercent: item.mem,
+        memRssBytes: rssBytes(item.memRss),
+        executablePath: executablePath(item.path, item.command),
       })),
     };
   },
@@ -158,4 +160,28 @@ async function ifaceNames(): Promise<string[]> {
 
 function finiteOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+// ps reports rss in kilobytes on macOS and Linux. systeminformation keeps that unit.
+function rssBytes(kilobytes: number): number {
+  if (!Number.isFinite(kilobytes) || kilobytes <= 0) {
+    return 0;
+  }
+  return kilobytes * 1024;
+}
+
+function executablePath(directory: string, command: string): string {
+  const folder = directory.trim().replace(/\/+$/, "");
+  if (!folder) {
+    return "";
+  }
+  let binary = command.trim();
+  const flag = binary.search(/\s--?\S/);
+  if (flag > 0) {
+    binary = binary.slice(0, flag).trim();
+  }
+  if (!binary || binary.includes("\0")) {
+    return "";
+  }
+  return `${folder}/${binary}`;
 }

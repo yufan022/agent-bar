@@ -123,9 +123,18 @@ test("process rows keep the executable name and drop arguments", () => {
         name: "/usr/bin/curl --header Authorization secret-value",
         cpuPercent: 1,
         memPercent: 0.2,
+        memRssBytes: 1024,
+        executablePath: "",
       },
-      { pid: 11, name: "Google Chrome Helper", cpuPercent: 40, memPercent: 3 },
-      { pid: 0, name: "kernel", cpuPercent: 99, memPercent: 1 },
+      {
+        pid: 11,
+        name: "Google Chrome Helper",
+        cpuPercent: 40,
+        memPercent: 3,
+        memRssBytes: 2048,
+        executablePath: "",
+      },
+      { pid: 0, name: "kernel", cpuPercent: 99, memPercent: 1, memRssBytes: 4096, executablePath: "" },
     ],
   };
   const snapshot = normalizeMonitor(probe({ processes }));
@@ -133,6 +142,91 @@ test("process rows keep the executable name and drop arguments", () => {
   assert.equal(snapshot.processes?.top[1]?.name, "curl");
   assert.equal(JSON.stringify(snapshot).includes("secret-value"), false);
   assert.equal(JSON.stringify(snapshot).includes("Authorization"), false);
+});
+
+test("applications sum resident memory inside one app bundle", () => {
+  const processes: ProcessRaw = {
+    all: 5,
+    running: 2,
+    list: [
+      {
+        pid: 20,
+        name: "Google Chrome Helper",
+        cpuPercent: 4,
+        memPercent: 2,
+        memRssBytes: 500,
+        executablePath:
+          "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper",
+      },
+      {
+        pid: 21,
+        name: "Google Chrome",
+        cpuPercent: 1,
+        memPercent: 1,
+        memRssBytes: 300,
+        executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      },
+      {
+        pid: 22,
+        name: "npm exec package@latest --token secret-value",
+        cpuPercent: 0,
+        memPercent: 0.1,
+        memRssBytes: 100,
+        executablePath: "",
+      },
+      {
+        pid: 23,
+        name: "Raycast Backend",
+        cpuPercent: 9,
+        memPercent: 1,
+        memRssBytes: 40,
+        executablePath: "",
+      },
+      {
+        pid: 25,
+        name: "helper",
+        cpuPercent: 0,
+        memPercent: 0,
+        memRssBytes: 50,
+        executablePath: "/Applications/Secret.app/Contents/secret-value/helper",
+      },
+      {
+        pid: 24,
+        name: "idle",
+        cpuPercent: 80,
+        memPercent: 0,
+        memRssBytes: 0,
+        executablePath: "",
+      },
+    ],
+  };
+  const snapshot = normalizeMonitor(
+    probe({
+      memory: {
+        totalBytes: 1000,
+        usedBytes: 800,
+        activeBytes: 800,
+        availableBytes: 200,
+        cacheBytes: 0,
+        swapTotalBytes: 0,
+        swapUsedBytes: 0,
+      },
+      processes,
+    }),
+  );
+  assert.deepEqual(
+    snapshot.processes?.apps.map((app) => [app.name, app.bytes, app.processes, app.percent]),
+    [
+      ["Google Chrome", 800, 2, 80],
+      ["npm", 100, 1, 10],
+      ["Secret", 50, 1, 5],
+      ["Raycast Backend", 40, 1, 4],
+    ],
+  );
+  assert.equal(snapshot.processes?.top[0]?.name, "idle");
+  const encoded = JSON.stringify(snapshot);
+  assert.equal(encoded.includes("secret-value"), false);
+  assert.equal(snapshot.processes?.apps.some((app) => app.name.includes("package@latest")), false);
 });
 
 test("battery sentinel and missing sensors stay empty", () => {

@@ -2,6 +2,7 @@ export const MONITOR_POLL_MS = 2_000;
 export const MONITOR_TRACE_LIMIT = 60;
 
 const TOP_PROCESSES = 8;
+const TOP_APPS = 8;
 const IFACE_NAME = /^[A-Za-z][A-Za-z0-9._-]{0,31}$/;
 const HIDDEN_IFACE = /^(lo|awdl|llw|anpi|ap|bridge|vmenet|nan|gif|stf|pktap|ipsec|utun|xhc)\d*$/i;
 const HIDDEN_FS_TYPES = new Set(["devfs", "autofs", "devtmpfs", "map"]);
@@ -92,10 +93,18 @@ export interface ProcessRow {
   memPercent: number;
 }
 
+export interface AppMemoryRow {
+  name: string;
+  bytes: number;
+  percent: number;
+  processes: number;
+}
+
 export interface ProcessReading {
   all: number;
   running: number;
   top: ProcessRow[];
+  apps: AppMemoryRow[];
 }
 
 export interface MonitorSnapshot {
@@ -185,6 +194,8 @@ export interface ProcessSample {
   name: string;
   cpuPercent: number;
   memPercent: number;
+  memRssBytes: number;
+  executablePath: string;
 }
 
 export interface ProcessRaw {
@@ -267,7 +278,7 @@ export function normalizeMonitor(probe: MonitorProbe): MonitorSnapshot {
     battery: normalizeBattery(probe.battery),
     temperature: normalizeTemperature(probe.temperature),
     gpus: normalizeGpus(probe.gpus),
-    processes: normalizeProcesses(probe.processes),
+    processes: normalizeProcesses(probe.processes, probe.memory?.totalBytes ?? 0),
     warnings: cleanWarnings(probe.warnings),
   };
 }
@@ -583,12 +594,12 @@ function normalizeGpus(gpus: readonly GpuRaw[]): GpuInfo[] {
   return result;
 }
 
-function normalizeProcesses(raw: ProcessRaw | null): ProcessReading | null {
+function normalizeProcesses(raw: ProcessRaw | null, totalBytes: number): ProcessReading | null {
   if (!raw) {
     return null;
   }
-  const top = raw.list
-    .filter((item) => Number.isInteger(item.pid) && item.pid > 0)
+  const samples = raw.list.filter((item) => Number.isInteger(item.pid) && item.pid > 0);
+  const top = samples
     .map((item) => ({
       pid: item.pid,
       name: processLabel(item.name),
@@ -601,7 +612,57 @@ function normalizeProcesses(raw: ProcessRaw | null): ProcessReading | null {
     all: positiveInt(raw.all),
     running: positiveInt(raw.running),
     top,
+    apps: rankApplications(samples, totalBytes),
   };
+}
+
+// Sum resident memory per application. Shared pages are counted in each process,
+// so a total can sit above the memory that application uniquely holds.
+function rankApplications(samples: readonly ProcessSample[], totalBytes: number): AppMemoryRow[] {
+  const grouped = new Map<string, { bytes: number; processes: number }>();
+  for (const sample of samples) {
+    const bytes = nonNegative(sample.memRssBytes);
+    if (bytes <= 0) {
+      continue;
+    }
+    const name = applicationName(sample);
+    const current = grouped.get(name) ?? { bytes: 0, processes: 0 };
+    current.bytes += bytes;
+    current.processes += 1;
+    grouped.set(name, current);
+  }
+  const physical = nonNegative(totalBytes);
+  return [...grouped.entries()]
+    .map(([name, usage]) => ({
+      name,
+      bytes: usage.bytes,
+      processes: usage.processes,
+      percent: physical > 0 ? clampPercent((usage.bytes / physical) * 100) : 0,
+    }))
+    .sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name))
+    .slice(0, TOP_APPS);
+}
+
+function applicationName(sample: ProcessSample): string {
+  const bundle = bundleName(sample.executablePath);
+  if (bundle) {
+    return bundle;
+  }
+  const label = processLabel(sample.name);
+  const executable = label.split(/\s+/)[0] ?? label;
+  if (executable && label.includes(" ") && executable === executable.toLowerCase()) {
+    return clip(executable, 64);
+  }
+  return label;
+}
+
+function bundleName(executablePath: string): string | null {
+  if (!executablePath) {
+    return null;
+  }
+  const match = /\/([^/]+)\.app(?:\/|$)/.exec(executablePath);
+  const name = match?.[1]?.trim() ?? "";
+  return name ? clip(name, 64) : null;
 }
 
 function visibleDisk(disk: DiskRaw): boolean {

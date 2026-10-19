@@ -26,6 +26,7 @@ import {
   type MemoryReading,
   type MonitorSnapshot,
   type NetworkIface,
+  type AppMemoryRow,
   type ProcessReading,
   type TemperatureReading,
   type TraceSample,
@@ -162,6 +163,11 @@ function MonitorBody({
             </div>
           ) : null}
         </Trace>
+      </section>
+
+      <section className="card" aria-labelledby="monitor-apps">
+        <h2 id="monitor-apps">Applications</h2>
+        <AppMemory apps={snapshot.processes?.apps ?? null} />
       </section>
 
       <div className="monitor-grid">
@@ -380,6 +386,36 @@ function NetworkList({ ifaces }: { ifaces: NetworkIface[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function AppMemory({ apps }: { apps: AppMemoryRow[] | null }) {
+  if (!apps) {
+    return <p className="muted">Application memory isn’t available.</p>;
+  }
+  if (apps.length === 0) {
+    return <p className="muted">No application memory reported.</p>;
+  }
+  return (
+    <>
+      <p className="muted">Resident memory, grouped by application.</p>
+      <ul className="monitor-list">
+        {apps.map((app) => (
+          <li key={app.name}>
+            <div className="monitor-split">
+              <span className="monitor-ellipsis" translate="no">
+                {app.name}
+              </span>
+              <span className="monitor-bytes">
+                {formatBytes(app.bytes)}
+                {app.percent >= 0.5 ? <span className="muted"> {formatPercent(app.percent)}</span> : null}
+              </span>
+            </div>
+            <Meter label={`${app.name} resident memory`} value={app.percent} />
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
